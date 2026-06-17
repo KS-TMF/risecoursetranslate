@@ -10,13 +10,14 @@
  *     data-provider="deepl"
  *     data-deepl-proxy="https://your-site.com/api/translate"
  *     defer></script>
- * v1.1
+ * v1.2
  */
 (function () {
   'use strict';
 
   /* ── CONFIG ────────────────────────────────────────────────────── */
   var LANGUAGES = [
+    { code: 'en', label: '🇬🇧 English' },
     { code: 'af', label: '🇿🇦 Afrikaans' },
     { code: 'ar', label: '🇸🇦 Arabic', rtl: true },
     { code: 'zh', label: '🇨🇳 Chinese (Simplified)' },
@@ -98,7 +99,6 @@
     '  background:rgba(26,26,46,.92);color:#fff;border-radius:10px;',
     '  box-shadow:0 4px 16px rgba(0,0,0,.25);',
     '}',
-    '#' + BAR_ID + ' label{opacity:.85;white-space:nowrap;user-select:none;}',
     '#' + BAR_ID + ' select{',
     '  background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.15);',
     '  color:#222;border-radius:6px;padding:6px 8px;font-size:13px;cursor:pointer;',
@@ -141,7 +141,13 @@
   function getLanguages() {
     var cfg = getConfig();
     if (cfg.provider !== 'deepl') return LANGUAGES;
-    return LANGUAGES.filter(function (l) { return mapToDeepLCode(l.code); });
+    return LANGUAGES.filter(function (l) {
+      return l.code === 'en' || mapToDeepLCode(l.code);
+    });
+  }
+
+  function isOriginalLanguage(code) {
+    return !code || code === 'en';
   }
 
   function init() {
@@ -149,7 +155,7 @@
     waitForCourseShell(function () {
       placeBar();
       var saved = getSavedLang();
-      if (saved) {
+      if (saved && !isOriginalLanguage(saved)) {
         var sel = document.getElementById('rise-select');
         if (sel) {
           sel.value = saved;
@@ -214,19 +220,14 @@
     bar = document.createElement('div');
     bar.id = BAR_ID;
 
-    var label = document.createElement('label');
-    label.setAttribute('for', 'rise-select');
-    label.textContent = '🌐 Translate:';
-
     var sel = document.createElement('select');
     sel.id = 'rise-select';
     sel.setAttribute('aria-label', 'Select course language');
 
-    var defaultOpt = new Option('Select language…', '');
-    sel.appendChild(defaultOpt);
     getLanguages().forEach(function (l) {
       sel.appendChild(new Option(l.label, l.code));
     });
+    sel.value = getSavedLang() || 'en';
 
     var spinner = document.createElement('div');
     spinner.className = 'rise-spinner';
@@ -238,18 +239,18 @@
 
     sel.addEventListener('change', function () {
       var lang = this.value;
-      activeTranslation = lang || null;
-      if (!lang) {
+      if (isOriginalLanguage(lang)) {
+        activeTranslation = null;
         restorePage();
         clearSavedLang();
         status.textContent = '';
         return;
       }
+      activeTranslation = lang;
       saveLang(lang);
       translatePage(lang, spinner, status);
     });
 
-    bar.appendChild(label);
     bar.appendChild(sel);
     bar.appendChild(spinner);
     bar.appendChild(status);
