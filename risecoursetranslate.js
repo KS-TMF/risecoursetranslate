@@ -1,6 +1,7 @@
 /*!
  * risecoursetranslate.js — Rise & Storyline Course Translator
- * Drop-in: add <script src="risecoursetranslate.js" defer></script> to index.html
+ * Drop-in: add to index.html:
+ *   <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@1.0/risecoursetranslate.js" defer></script>
  * Uses Google Translate (free endpoint). No API key required.
  * v1.0
  */
