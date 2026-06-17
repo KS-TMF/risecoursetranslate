@@ -1,16 +1,7 @@
 /*!
  * risecoursetranslate.js — Rise & Storyline Course Translator
- * Drop-in: add to index.html:
- *   <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@1.0/risecoursetranslate.js" defer></script>
- *
- * Default: Google Translate (free, no API key).
- * DeepL: requires your own proxy (DeepL blocks browser calls). Example:
- *   <script
- *     src="risecoursetranslate.js"
- *     data-provider="deepl"
- *     data-deepl-proxy="https://your-site.com/api/translate"
- *     defer></script>
- * v1.2
+ * Drop-in — use this one link in your Rise index.html (always latest):
+ *   <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" defer></script>
  */
 (function () {
   'use strict';
