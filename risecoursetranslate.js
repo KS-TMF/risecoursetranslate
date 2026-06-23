@@ -2,14 +2,14 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in: add <script src="risecoursetranslate.js" defer></script> to index.html
  * Uses Google Translate (free endpoint). No API key required.
- * v1.6.6 — fix pick/close: remove panel capture blockers, click toggle, reliable close
+ * v1.6.7 — reset button white outline/text on dark bar
  */
 (function () {
   'use strict';
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.6.6';
+  window.__riseTranslateVersion = '1.6.7';
 
   var LANGUAGES = [
     { code: 'af', label: 'Afrikaans' },
@@ -147,14 +147,18 @@
     '#' + BAR_ID + '.rise-translate-bar--floating .rt-option.rt-selected{background:rgba(255,255,255,.12);color:#fff;}',
     '#' + BAR_ID + ' .rt-option.rt-hidden{display:none;}',
     '#' + BAR_ID + ' .rt-reset{',
-    '  background:transparent;border:1px solid rgba(127,127,127,.35);opacity:.7;',
+    '  background:transparent;border:1px solid rgba(127,127,127,.35);',
     '  border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap;color:inherit;',
     '}',
     '#' + BAR_ID + ' .rt-reset:hover{opacity:1;}',
-    '#' + BAR_ID + '.rise-translate-bar--floating .rt-reset{',
-    '  border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.6);',
+    '#' + BAR_ID + '.rise-translate-bar--floating .rt-reset,',
+    '#' + BAR_ID + '.rise-translate-bar--cover .rt-reset{',
+    '  opacity:1;border:1px solid #fff;color:#fff;',
     '}',
-    '#' + BAR_ID + '.rise-translate-bar--floating .rt-reset:hover{border-color:rgba(255,255,255,.5);color:#fff;}',
+    '#' + BAR_ID + '.rise-translate-bar--floating .rt-reset:hover,',
+    '#' + BAR_ID + '.rise-translate-bar--cover .rt-reset:hover{',
+    '  background:rgba(255,255,255,.12);border-color:#fff;color:#fff;',
+    '}',
     '#' + BAR_ID + ' .rt-spinner{',
     '  width:14px;height:14px;border:2px solid rgba(127,127,127,.3);',
     '  border-top-color:currentColor;border-radius:50%;flex-shrink:0;',
