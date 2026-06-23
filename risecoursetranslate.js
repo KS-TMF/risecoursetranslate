@@ -2,10 +2,13 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in: add <script src="risecoursetranslate.js" defer></script> to index.html
  * Uses Google Translate (free endpoint). No API key required.
- * v1.6.4 — Rise: skip reposition while open, pointerdown outside-close, no close on move
+ * v1.6.5 — portal dropdown to body (Rise overflow), mousedown toggle, no global close
  */
 (function () {
   'use strict';
+
+  if (window.__riseTranslateLoaded) return;
+  window.__riseTranslateLoaded = true;
 
   var LANGUAGES = [
     { code: 'af', label: 'Afrikaans' },
@@ -72,8 +75,8 @@
   var focusTimer        = null;
   var placementReady    = false;
   var barRef            = null;
-  var suppressCloseUntil = 0;
   var placeBarPending   = false;
+  var panelWrapRef      = null;
 
   /* ── STYLES ─────────────────────────────────────────────────────── */
   var css = [
@@ -159,6 +162,33 @@
     '#' + BAR_ID + '.rise-translate-bar--floating .rt-spinner{',
     '  border-color:rgba(255,255,255,.25);border-top-color:#fff;',
     '}',
+    /* portaled panel (moved to body while open — escapes Rise overflow clipping) */
+    '.rt-panel.rt-panel--portaled{',
+    '  visibility:hidden;opacity:0;position:fixed;width:240px;overflow:hidden;',
+    '  background:#fff;border:1px solid rgba(0,0,0,.12);color:#222;',
+    '  border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);',
+    '  z-index:2147483647;pointer-events:none;',
+    '  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;',
+    '}',
+    '.rt-panel.rt-panel--portaled.rt-open{visibility:visible;opacity:1;pointer-events:all;}',
+    '.rt-panel.rt-panel--portaled.rt-panel--dark{',
+    '  background:#1e1e2e;border-color:rgba(255,255,255,.2);color:#fff;',
+    '  box-shadow:0 8px 24px rgba(0,0,0,.5);',
+    '}',
+    '.rt-panel.rt-panel--portaled .rt-search{',
+    '  width:100%;box-sizing:border-box;padding:10px 12px;',
+    '  background:transparent;border:none;border-bottom:1px solid rgba(0,0,0,.08);',
+    '  color:inherit;font-size:13px;outline:none;',
+    '}',
+    '.rt-panel.rt-panel--portaled.rt-panel--dark .rt-search{',
+    '  background:rgba(255,255,255,.08);border-bottom-color:rgba(255,255,255,.1);color:#fff;',
+    '}',
+    '.rt-panel.rt-panel--portaled .rt-option{padding:9px 14px;cursor:pointer;opacity:.85;}',
+    '.rt-panel.rt-panel--portaled .rt-option:hover{background:rgba(0,0,0,.06);}',
+    '.rt-panel.rt-panel--portaled.rt-panel--dark .rt-option:hover{background:rgba(255,255,255,.1);}',
+    '.rt-panel.rt-panel--portaled .rt-option.rt-selected{font-weight:500;opacity:1;background:rgba(0,0,0,.08);}',
+    '.rt-panel.rt-panel--portaled.rt-panel--dark .rt-option.rt-selected{background:rgba(255,255,255,.12);color:#fff;}',
+    '.rt-panel.rt-panel--portaled .rt-list{max-height:260px;overflow-y:auto;padding:4px 0;}',
     '@keyframes rt-spin{to{transform:rotate(360deg)}}'
   ].join('\n');
 
@@ -180,6 +210,7 @@
   }
 
   function injectStyles() {
+    if (document.getElementById('rise-translate-styles')) return;
     var s = document.createElement('style');
     s.id = 'rise-translate-styles';
     s.textContent = css;
@@ -229,6 +260,7 @@
       opt.addEventListener('mousedown', function (e) {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         selectLanguage(lang.code, list);
         closePanel(trigger, panel);
       });
@@ -242,11 +274,22 @@
       });
     });
 
+    function stopRiseBubble(e) {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
+
+    panel.addEventListener('mousedown', stopRiseBubble, true);
+    panel.addEventListener('click', stopRiseBubble, true);
+    panel.addEventListener('touchstart', stopRiseBubble, true);
+    search.addEventListener('mousedown', stopRiseBubble, true);
+    search.addEventListener('click', stopRiseBubble, true);
+    search.addEventListener('touchstart', stopRiseBubble, true);
+
     trigger.addEventListener('mousedown', function (e) {
+      e.preventDefault();
       e.stopPropagation();
-    });
-    trigger.addEventListener('click', function (e) {
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       if (panel.classList.contains('rt-open')) {
         closePanel(trigger, panel);
       } else {
@@ -254,18 +297,16 @@
       }
     });
 
-    wrap.addEventListener('mousedown', function (e) { e.stopPropagation(); });
-    panel.addEventListener('mousedown', function (e) { e.stopPropagation(); });
-    panel.addEventListener('click', function (e) { e.stopPropagation(); });
-    search.addEventListener('mousedown', function (e) { e.stopPropagation(); });
-    search.addEventListener('click', function (e) { e.stopPropagation(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && panelOpen) closePanel(trigger, panel);
+    });
 
-    document.addEventListener('pointerdown', function (e) {
-      if (Date.now() < suppressCloseUntil) return;
-      if (!panelOpen) return;
-      if (eventInBar(bar, e)) return;
-      closePanel(trigger, panel);
+    window.addEventListener('scroll', function () {
+      if (panelOpen) positionPortaledPanel(trigger, panel);
     }, true);
+    window.addEventListener('resize', function () {
+      if (panelOpen) positionPortaledPanel(trigger, panel);
+    });
 
     panel.appendChild(search);
     panel.appendChild(list);
@@ -298,28 +339,52 @@
 
     bar._trigger = trigger;
     bar._panel   = panel;
+    bar._wrap    = wrap;
     bar._spinner = spinner;
     bar._reset   = resetBtn;
     bar._list    = list;
     barRef = bar;
+    panelWrapRef = wrap;
     return bar;
+  }
+
+  function positionPortaledPanel(trigger, panel) {
+    var bar, r, w, h, top, openUp;
+    if (!trigger || !panel || !panel.classList.contains('rt-panel--portaled')) return;
+    bar = barRef;
+    r = trigger.getBoundingClientRect();
+    w = Math.max(Math.round(r.width), 240);
+    panel.style.position = 'fixed';
+    panel.style.width = w + 'px';
+    panel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    panel.style.bottom = 'auto';
+    h = panel.offsetHeight || 300;
+    openUp = bar && bar.classList.contains('rise-translate-bar--floating');
+    if (!openUp && r.bottom + h + 8 > window.innerHeight && r.top > h + 8) openUp = true;
+    top = openUp ? r.top - h - 6 : r.bottom + 6;
+    panel.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + 'px';
+  }
+
+  function portalPanel(bar, wrap, trigger, panel) {
+    var dark = bar.classList.contains('rise-translate-bar--floating');
+    panel.classList.add('rt-panel--portaled');
+    panel.classList.toggle('rt-panel--dark', dark);
+    document.body.appendChild(panel);
+    positionPortaledPanel(trigger, panel);
+  }
+
+  function unportalPanel(wrap, panel) {
+    panel.classList.remove('rt-panel--portaled', 'rt-panel--dark');
+    panel.style.top = '';
+    panel.style.left = '';
+    panel.style.width = '';
+    panel.style.bottom = '';
+    panel.style.position = '';
+    if (wrap && panel.parentElement !== wrap) wrap.appendChild(panel);
   }
 
   function isPanelOpen() {
     return panelOpen;
-  }
-
-  function eventInBar(bar, e) {
-    var path, i;
-    if (!bar || !e) return false;
-    if (e.target && bar.contains(e.target)) return true;
-    if (e.composedPath) {
-      path = e.composedPath();
-      for (i = 0; i < path.length; i++) {
-        if (path[i] === bar) return true;
-      }
-    }
-    return false;
   }
 
   function isBarPlacedOnCover(startBtn, bar) {
@@ -453,7 +518,7 @@
       if (isPanelOpen()) return;
       var relevant = mutations.some(function (m) {
         var t = m.target;
-        if (t && t.closest && t.closest('#' + BAR_ID)) return false;
+        if (t && t.closest && (t.closest('#' + BAR_ID) || t.closest('.rt-panel'))) return false;
         return true;
       });
       if (!relevant) return;
@@ -469,24 +534,31 @@
   }
 
   function openPanel(trigger, panel, search) {
+    var bar = barRef;
+    var wrap = (bar && bar._wrap) || panelWrapRef;
     if (focusTimer) { clearTimeout(focusTimer); focusTimer = null; }
     panelOpen = true;
-    suppressCloseUntil = Date.now() + 200;
     panel.classList.add('rt-open');
     trigger.querySelector('.rt-caret').style.transform = 'rotate(180deg)';
     search.value = '';
     panel.querySelectorAll('.rt-option').forEach(function (o) { o.classList.remove('rt-hidden'); });
+    if (bar && wrap) portalPanel(bar, wrap, trigger, panel);
     focusTimer = setTimeout(function () {
       focusTimer = null;
-      if (panelOpen) search.focus();
-    }, 30);
+      if (panelOpen) {
+        positionPortaledPanel(trigger, panel);
+        search.focus({ preventScroll: true });
+      }
+    }, 50);
   }
 
   function closePanel(trigger, panel) {
+    var wrap = (barRef && barRef._wrap) || panelWrapRef;
     if (focusTimer) { clearTimeout(focusTimer); focusTimer = null; }
     panelOpen = false;
     panel.classList.remove('rt-open');
     trigger.querySelector('.rt-caret').style.transform = '';
+    unportalPanel(wrap, panel);
     var search = panel.querySelector('.rt-search');
     if (search && document.activeElement === search) search.blur();
     if (placeBarPending) {
@@ -525,7 +597,7 @@
       acceptNode: function (node) {
         var p = node.parentElement;
         if (!p) return NodeFilter.FILTER_REJECT;
-        if (p.closest && p.closest('#' + BAR_ID)) return NodeFilter.FILTER_REJECT;
+        if (p.closest && (p.closest('#' + BAR_ID) || p.closest('.rt-panel'))) return NodeFilter.FILTER_REJECT;
         if (skip.indexOf(p.nodeName) !== -1) return NodeFilter.FILTER_REJECT;
         var txt = node.nodeValue.trim();
         if (!txt || txt.length < 2) return NodeFilter.FILTER_SKIP;
