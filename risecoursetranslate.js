@@ -2,7 +2,7 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in: add <script src="risecoursetranslate.js" defer></script> to index.html
  * Uses Google Translate (free endpoint). No API key required.
- * v1.3 — fixed dropdown instantly closing on open
+ * v1.4 — fixed dropdown snapping shut on mobile/touch (stopPropagation on wrap covers click + touchstart)
  */
 (function () {
   'use strict';
@@ -200,28 +200,22 @@
       });
     });
 
-    /* stop clicks inside panel bubbling to document close listener */
-    panel.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    /* stop ALL clicks/touches inside the whole dropdown wrap from reaching document */
+    wrap.addEventListener('click',      function (e) { e.stopPropagation(); });
+    wrap.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
 
-    var justOpened = false;
-
-    trigger.addEventListener('click', function (e) {
-      e.stopPropagation();
+    trigger.addEventListener('click', function () {
       var isOpen = panel.classList.contains('open');
       if (isOpen) {
         closePanel(trigger, panel);
       } else {
-        justOpened = true;
         openPanel(trigger, panel, search);
-        setTimeout(function () { justOpened = false; }, 50);
       }
     });
 
-    /* close on outside click — but not the same click that opened it */
-    document.addEventListener('click', function () {
-      if (justOpened) return;
-      closePanel(trigger, panel);
-    });
+    /* close on outside click/touch — wrap's stopPropagation keeps this from firing when inside */
+    document.addEventListener('click',      function () { closePanel(trigger, panel); });
+    document.addEventListener('touchstart', function () { closePanel(trigger, panel); }, { passive: true });
 
     panel.appendChild(search);
     panel.appendChild(list);
