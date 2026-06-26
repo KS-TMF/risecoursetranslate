@@ -34,37 +34,26 @@ Paste once in **`scormcontent/index.html`**. **Your team does not update this.**
 
 ## Current version
 
-**v1.8.7**
+**v1.8.9**
 
 ---
 
 ## For non-technical team members
 
-**They only edit Excel.** Nothing else.
+**They only edit `Translation Glossary.csv` or Excel.** Nothing else.
 
 ### Updating the glossary (2 steps)
 
-1. **Edit** `Translation Glossary.xlsx` in Excel → **Save**
-2. **Double-click** `Update Glossary.command` (in the risecoursetranslate folder)
+1. **Edit** the glossary in Excel → save as **`Translation Glossary.csv`**
+2. **Double-click** **`Update Glossary.command`**
 
-That’s it. It creates **`Translation Glossary.js`** automatically.
+That copies the CSV into your course and syncs it into `index.html`. **No .js files.**
 
-### One-time setup (optional — for auto-copy to course)
+### One-time setup
 
 1. Copy `glossary-course-folder.example.txt` → rename to `glossary-course-folder.txt`
-2. Paste the full path to your `scormcontent` folder, e.g.  
-   `/Users/you/Desktop/MyCourse/scormcontent`
-3. After that, double-clicking **Update Glossary** also copies the file into the course folder
-
-### Who does what
-
-| Person | Task |
-|--------|------|
-| **Team** | Edit Excel only |
-| **Anyone** | Double-click **Update Glossary** after Excel is saved |
-| **Publisher** | Re-zip and upload course to LMS (when ready) |
-
-No terminal. No CSV export. No editing `.js` files by hand.
+2. Paste the full path to your `scormcontent` folder
+3. Double-click **Update Glossary** after every CSV change
 
 ---
 
@@ -72,65 +61,48 @@ No terminal. No CSV export. No editing `.js` files by hand.
 
 ### Step 1 — One line in `index.html`
 
-Paste inside `<head>` or top of `<body>` in **`scormcontent/index.html`**:
-
 ```html
 <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
 ```
 
-### Step 2 — One file in the course folder
+### Step 2 — Run Update Glossary
 
-Copy **`Translation Glossary.js`** into **`scormcontent/`** (same folder as `index.html`).
+Double-click **Update Glossary** — it puts **`Translation Glossary.csv`** in `scormcontent/` and syncs it into `index.html`.
 
 ### Folder layout
 
 ```
-xapi-package/
-├── scormdriver/          ← do not edit
-└── scormcontent/         ← your course
-    ├── index.html        ← add script line here
-    └── Translation Glossary.js
+scormcontent/
+  index.html                  ← script line + embedded glossary (auto)
+  Translation Glossary.csv    ← your glossary file
 ```
 
-### Step 3 — Re-zip and upload to LMS
-
-Each time you re-export from Rise, re-add the script line and glossary file.
+### Step 3 — Re-zip and upload
 
 ---
 
-## Your glossary (Excel)
+## Your glossary file
 
-- **Source file:** `Translation Glossary.xlsx`
+- **File name:** `Translation Glossary.csv`
 - **Columns:** Source content | Target content | Notes
-- **Purpose:** Every term listed stays in English (or original) regardless of language selected
-- **Not** a translation dictionary — it is a “do not translate” list
+- **Purpose:** Terms listed stay untranslated in every language
 
-### When you update the Excel sheet
+### When you update the list
 
-1. Edit `Translation Glossary.xlsx`
-2. Save / export as CSV (optional)
-3. Rebuild the `.js` file:
-
-```bash
-node scripts/build-glossary-js.mjs "Translation Glossary.csv"
-```
-
-4. Copy the new **`Translation Glossary.js`** into `scormcontent/`
-5. Re-zip and upload
+1. Edit CSV or Excel → save as `Translation Glossary.csv`
+2. Double-click **Update Glossary**
+3. Re-zip and upload
 
 ---
 
-## Why `.js` and not `.csv` in xAPI?
+## How glossary loads (CSV only)
 
-| File | xAPI / SCORM |
-|------|----------------|
-| `Translation Glossary.csv` | Usually **fails** (LMS blocks fetch) |
-| `Translation Glossary.js` | **Works** — script auto-loads it |
+Update Glossary syncs your CSV into `index.html` as a hidden block. The course reads that — **no .js files**.
 
-The translator tries CSV first, then automatically falls back to `.js`. You will often see `Glossary fetch failed` in the console for CSV — that is expected. Look for:
+You may still see `Glossary fetch failed` for the CSV file — that is OK if you see:
 
 ```
-[risecoursetranslate] Glossary loaded: 49 protected term(s) from ...Translation Glossary.js
+Glossary loaded: 49 protected term(s) from embedded-csv
 ```
 
 ---
@@ -140,47 +112,17 @@ The translator tries CSV first, then automatically falls back to `.js`. You will
 | Item | Public? |
 |------|---------|
 | `risecoursetranslate.js` (CDN) | Yes — on GitHub |
-| `Translation Glossary.js` | **No** — stays in your course upload only |
-| Glossary terms | **Never** commit to the public GitHub repo |
+| `Translation Glossary.csv` | **No** — stays in your course only |
 
 ---
 
 ## How to verify it works
 
-Open course → **F12** → **Console**:
-
 | Check | Expected |
 |-------|----------|
-| `window.__riseTranslateVersion` | `"1.8.7"` |
+| `window.__riseTranslateVersion` | `"1.8.9"` |
 | `window.__riseGlossaryCount` | `49` (or your term count) |
-| Console message | `Glossary loaded: X protected term(s)` |
-
-Pick French/Spanish — terms like **ODF**, **TM Forum**, **Digital Twin** should stay unchanged.
-
----
-
-## Version history (this project)
-
-| Version | What changed |
-|---------|----------------|
-| v1.6.x | Dropdown, placement on Rise cover vs floating widget |
-| v1.8.0 | Glossary CSV support |
-| v1.8.2 | Excel “Source content / Target content” format |
-| v1.8.3 | Block-level translation + segment glossary (Rise-safe) |
-| v1.8.4 | Inline embed + multi-path fetch |
-| v1.8.5 | Default filename `Translation Glossary` |
-| v1.8.6 | Auto-load `Translation Glossary.csv` |
-| v1.8.7 | Auto-fallback to `Translation Glossary.js` when CSV fetch fails (xAPI fix) |
-
----
-
-## Optional build scripts (on your Mac)
-
-| Script | Purpose |
-|--------|---------|
-| `scripts/build-glossary-js.mjs` | Excel/CSV → `Translation Glossary.js` |
-| `scripts/build-combined-embed.mjs` | Single paste block (glossary embedded in HTML — private) |
-| `scripts/verify-glossary.mjs` | Test that a CSV parses correctly |
+| Console | `Glossary loaded: X protected term(s)` |
 
 ---
 
@@ -188,11 +130,9 @@ Pick French/Spanish — terms like **ODF**, **TM Forum**, **Digital Twin** shoul
 
 | Problem | Fix |
 |---------|-----|
-| Glossary fetch failed | Normal for CSV in xAPI — add `Translation Glossary.js` |
-| Glossary count = 0 | File missing or wrong folder — must be in `scormcontent/` |
-| Terms still translate | Update CDN commit; confirm glossary loaded in console |
-| Dropdown issues | Check `window.__riseTranslateVersion` matches latest |
-| Re-publish from Rise | Re-add script line + glossary file every time |
+| Glossary count = 0 | Run **Update Glossary** after editing CSV |
+| Glossary fetch failed | OK if `embedded-csv` loads — run Update Glossary |
+| Re-publish from Rise | Re-run **Update Glossary** (re-embeds CSV into index.html) |
 
 ---
 
@@ -201,9 +141,8 @@ Pick French/Spanish — terms like **ODF**, **TM Forum**, **Digital Twin** shoul
 | File | Purpose |
 |------|---------|
 | `risecoursetranslate.js` | Main translator (CDN) |
-| `glossary.example.csv` | Example format (fake terms) |
-| `glossary.example.js` | Example for local `test.html` |
-| `test.html` | Local mock Rise page for testing |
+| `Update Glossary.command` | Double-click to sync CSV into course |
+| `glossary.example.csv` | Example format |
 | `SETUP-GUIDE.md` | This file |
 
 ---

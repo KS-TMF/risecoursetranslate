@@ -1,7 +1,7 @@
-# One-time setup (optional):
+# One-time setup:
 # 1. Copy this file to: glossary-course-folder.txt
-# 2. Replace the line below with the full path to your scormcontent folder
-# 3. Double-click "Update Glossary" — the .js file copies there automatically
+# 2. Paste the full path to your scormcontent folder below
+# 3. Double-click "Update Glossary" after editing Translation Glossary.csv
 #
 # Example (Mac):
 # /Users/yourname/Desktop/MyCourse/scormcontent

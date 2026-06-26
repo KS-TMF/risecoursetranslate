@@ -2,17 +2,16 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
- * v1.8.8 — fix glossary .js load (CSV was mis-parsed when source URL ended in .js)
+ * v1.8.9 — CSV only: embedded glossary in index.html via Update Glossary (no .js files)
  */
 (function () {
   'use strict';
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.8.8';
+  window.__riseTranslateVersion = '1.8.9';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv'];
-  var GLOSSARY_SCRIPT_FILES = ['Translation Glossary.js', 'glossary.js'];
 
   var LANGUAGES = [
     { code: 'af', label: 'Afrikaans' },
@@ -648,10 +647,16 @@
   }
 
   function getInlineGlossaryText() {
+    var el, script, elId, prev, b64;
     if (window.__riseGlossaryCsv) return window.__riseGlossaryCsv;
-    var script = getScriptEl();
-    var elId, el, prev;
+    el = document.getElementById('rise-glossary');
+    if (el) return el.textContent;
+    script = getScriptEl();
     if (!script) return null;
+    b64 = script.getAttribute('data-glossary-inline');
+    if (b64) {
+      try { return atob(b64); } catch (e) {}
+    }
     elId = script.getAttribute('data-glossary-element');
     if (elId) {
       el = document.getElementById(elId);
@@ -700,7 +705,7 @@
   }
 
   function fetchUrlText(url) {
-    return fetch(url, { credentials: 'same-origin' }).then(function (r) {
+    return fetch(encodeURI(url).replace(/#/g, '%23'), { credentials: 'same-origin' }).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
     });
@@ -718,64 +723,20 @@
     return urls;
   }
 
-  function getJsFallbackUrls(path) {
-    var urls = [];
-    if (path && /\.csv$/i.test(path)) {
-      urls = getGlossaryUrlsForFiles([path.replace(/\.csv$/i, '.js')]);
-    }
-    getGlossaryUrlsForFiles(GLOSSARY_SCRIPT_FILES).forEach(function (u) {
-      if (urls.indexOf(u) === -1) urls.push(u);
-    });
-    return urls;
-  }
-
-  function loadGlossaryViaScript(urls, idx, done) {
-    var s;
+  function loadGlossaryFromUrls(urls, idx, done) {
     if (glossary.keep.length > 0) return done();
-    if (window.__riseGlossaryCsv) {
-      return applyGlossaryFromText(window.__riseGlossaryCsv, 'inline-script', done);
-    }
     if (idx >= urls.length) {
       glossary = emptyGlossary();
       window.__riseGlossaryCount = 0;
       window.__riseGlossarySource = null;
-      console.warn('[risecoursetranslate] Glossary not loaded. Add Translation Glossary.js next to index.html');
-      return done();
-    }
-    s = document.createElement('script');
-    s.src = urls[idx];
-    s.onload = function () {
-      if (window.__riseGlossaryCsv) {
-        applyGlossaryFromText(window.__riseGlossaryCsv, urls[idx], done);
-      } else {
-        console.warn('[risecoursetranslate] Glossary script loaded but empty:', urls[idx]);
-        loadGlossaryViaScript(urls, idx + 1, done);
-      }
-    };
-    s.onerror = function () {
-      console.warn('[risecoursetranslate] Glossary script failed:', urls[idx]);
-      loadGlossaryViaScript(urls, idx + 1, done);
-    };
-    document.head.appendChild(s);
-  }
-
-  function loadGlossaryFromUrls(urls, idx, done, scriptFallback) {
-    if (glossary.keep.length > 0) return done();
-    if (idx >= urls.length) {
-      if (scriptFallback && scriptFallback.length) {
-        return loadGlossaryViaScript(scriptFallback, 0, done);
-      }
-      glossary = emptyGlossary();
-      window.__riseGlossaryCount = 0;
-      window.__riseGlossarySource = null;
-      console.warn('[risecoursetranslate] Glossary not loaded. Tried:', urls.join(' | '));
+      console.warn('[risecoursetranslate] Glossary not loaded. Run Update Glossary to sync Translation Glossary.csv into index.html.');
       return done();
     }
     fetchUrlText(urls[idx])
       .then(function (text) { applyGlossaryFromText(text, urls[idx], done); })
       .catch(function (e) {
         console.warn('[risecoursetranslate] Glossary fetch failed (' + urls[idx] + '):', e.message);
-        loadGlossaryFromUrls(urls, idx + 1, done, scriptFallback);
+        loadGlossaryFromUrls(urls, idx + 1, done);
       });
   }
 
@@ -922,24 +883,20 @@
   function loadGlossary(done) {
     var inline = getInlineGlossaryText();
     var script = getScriptEl();
-    var path, urls, scriptUrls;
+    var path, urls;
     if (inline) {
-      return applyGlossaryFromText(inline, 'inline', done);
+      return applyGlossaryFromText(inline, 'embedded-csv', done);
     }
-    scriptUrls = getGlossaryUrlsForFiles(GLOSSARY_SCRIPT_FILES);
     if (script && script.getAttribute('data-glossary-url')) {
-      return loadGlossaryFromUrls([script.getAttribute('data-glossary-url')], 0, done, scriptUrls);
+      return loadGlossaryFromUrls([script.getAttribute('data-glossary-url')], 0, done);
     }
     path = script && script.getAttribute('data-glossary');
     if (path) {
       urls = getGlossaryCandidateUrls(path);
-      return loadGlossaryFromUrls(urls, 0, done, getJsFallbackUrls(path));
+      return loadGlossaryFromUrls(urls, 0, done);
     }
     urls = getGlossaryUrlsForFiles(GLOSSARY_FETCH_FILES);
-    if (!urls.length) {
-      return loadGlossaryViaScript(scriptUrls, 0, done);
-    }
-    loadGlossaryFromUrls(urls, 0, done, scriptUrls);
+    loadGlossaryFromUrls(urls, 0, done);
   }
 
   function getOverride(text, lang) {

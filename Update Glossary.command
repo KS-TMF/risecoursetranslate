@@ -1,16 +1,16 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 echo ""
-echo "  Updating glossary from Translation Glossary.xlsx..."
+echo "  Syncing Translation Glossary.csv into your course..."
 echo ""
-python3 scripts/xlsx-to-glossary-js.py "$@"
+python3 scripts/update-glossary.py "$@"
 STATUS=$?
 echo ""
 if [ $STATUS -eq 0 ]; then
-  osascript -e 'display notification "Translation Glossary.js is ready." with title "Glossary updated"' 2>/dev/null || true
+  osascript -e 'display notification "Translation Glossary.csv synced." with title "Glossary updated"' 2>/dev/null || true
   echo "  You can close this window."
 else
-  echo "  Something went wrong. Is Translation Glossary.xlsx in Downloads?"
+  echo "  Put Translation Glossary.csv in Downloads, then try again."
   echo ""
 fi
 read -n 1 -s -r -p "Press any key to close..."
