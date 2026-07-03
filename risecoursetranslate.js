@@ -2,14 +2,14 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
- * v1.9.0 — floating language box moved to bottom-left
+ * v1.9.1 — fix language search when dropdown is portaled to body
  */
 (function () {
   'use strict';
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.9.0';
+  window.__riseTranslateVersion = '1.9.1';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv'];
 
@@ -198,6 +198,7 @@
     '.rt-panel.rt-panel--portaled .rt-option.rt-selected{font-weight:500;opacity:1;background:rgba(0,0,0,.08);}',
     '.rt-panel.rt-panel--portaled.rt-panel--dark .rt-option.rt-selected{background:rgba(255,255,255,.12);color:#fff;}',
     '.rt-panel.rt-panel--portaled .rt-list{max-height:260px;overflow-y:auto;padding:4px 0;}',
+    '.rt-option.rt-hidden{display:none !important;}',
     '@keyframes rt-spin{to{transform:rotate(360deg)}}'
   ].join('\n');
 
