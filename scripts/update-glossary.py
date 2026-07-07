@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync Translation Glossary.csv into the course (CSV only — no .js files)."""
+"""Sync Translation Glossary into the course (CSV + .js for LMS compatibility)."""
 import json
 import re
 import sys
@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 GLOSSARY_CSV = 'Translation Glossary.csv'
+GLOSSARY_JS = 'Translation Glossary.js'
 EMBED_START = '<script type="text/plain" id="rise-glossary" data-rise-glossary>'
 EMBED_END = '</script>'
 
@@ -95,6 +96,14 @@ def build_window_csv_script(csv_text):
     return f'<script>window.__riseGlossaryCsv={payload};</script>'
 
 
+def build_glossary_js(csv_text):
+    payload = json.dumps(csv_text.strip())
+    return (
+        '/* Auto-built from Translation Glossary.csv — do not edit by hand */\n'
+        f'window.__riseGlossaryCsv = {payload};\n'
+    )
+
+
 def sync_index_html(index_path, csv_text):
     html = index_path.read_text(encoding='utf-8')
     block = build_embed_block(csv_text)
@@ -144,6 +153,11 @@ def main():
     print('Read:', source)
     print('CSV ready:', csv_out)
 
+    # Always generate the .js file next to the CSV
+    js_out = source.parent / GLOSSARY_JS
+    js_out.write_text(build_glossary_js(csv_text), encoding='utf-8')
+    print('JS ready:', js_out)
+
     if not config.exists():
         print('Tip: add glossary-course-folder.txt with your scormcontent path to auto-copy into the course.')
         return 0
@@ -158,6 +172,10 @@ def main():
     dest_csv.write_text(csv_text, encoding='utf-8')
     print('Copied CSV to course:', dest_csv)
 
+    dest_js = course_dir / GLOSSARY_JS
+    dest_js.write_text(build_glossary_js(csv_text), encoding='utf-8')
+    print('Copied JS to course:', dest_js)
+
     index_path = course_dir / 'index.html'
     if index_path.exists():
         sync_index_html(index_path, csv_text)
@@ -165,7 +183,7 @@ def main():
     else:
         print('Note: index.html not found in', course_dir)
 
-    print('Done. Glossary embedded in index.html (window.__riseGlossaryCsv + rise-glossary block).')
+    print('Done. Glossary ready (CSV + JS + embedded in index.html).')
     return 0
 
 
