@@ -2,6 +2,7 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.10.6 — translate each text individually (no separator Google can corrupt per-language)
  * v1.10.5 — glossary: word-boundary matching so short terms like "IT" don't match inside words
  * v1.10.4 — glossary: fix double-encoding in CSV fetch (spaces in filename caused 404)
  * v1.10.3 — glossary: clearer load failure status; supports Translation Glossary.js fallback
@@ -19,7 +20,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.10.5';
+  window.__riseTranslateVersion = '1.10.6';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -1181,7 +1182,6 @@
   function batchTranslate(texts, lang, done) {
     var jobs = texts.map(function (orig) { return prepareTranslationJob(orig, lang); });
     var toSend = [];
-    var i, j, job, seg;
     jobs.forEach(function (item) {
       if (item.override) return;
       item.segments.forEach(function (segment) {
@@ -1198,55 +1198,60 @@
       return done(null);
     }
 
-    var chunks = chunkArray(toSend, 50);
-    var pending = chunks.length;
+    // Translate each text individually (no separator that Google can corrupt)
+    // with controlled concurrency to avoid rate limits.
+    var results = new Array(toSend.length);
+    var idx = 0;
+    var finished = 0;
     var errored = null;
-    var resultsByChunk = new Array(chunks.length);
+    var CONCURRENCY = 6;
 
-    for (i = 0; i < chunks.length; i++) {
-      (function (chunkIdx, chunk) {
-        googleTranslate(chunk, lang, function (err, results) {
-          if (errored) return;
-          if (err) { errored = err; return done(err); }
-          resultsByChunk[chunkIdx] = results || [];
-          if (--pending === 0) {
-            var pool = [];
-            var cursor = 0;
-            var parts;
-            for (j = 0; j < resultsByChunk.length; j++) {
-              pool = pool.concat(resultsByChunk[j]);
+    function next() {
+      if (errored) return;
+      var myIdx = idx++;
+      if (myIdx >= toSend.length) return;
+      googleTranslate(toSend[myIdx], lang, function (err, translated) {
+        if (errored) return;
+        if (err) { errored = err; return done(err); }
+        results[myIdx] = translated;
+        finished++;
+        if (finished === toSend.length) {
+          var cursor = 0;
+          jobs.forEach(function (item) {
+            if (item.override) {
+              cache[lang][item.orig] = item.override;
+              return;
             }
-            jobs.forEach(function (item) {
-              if (item.override) {
-                cache[lang][item.orig] = item.override;
-                return;
+            var parts = [];
+            item.segments.forEach(function (segment) {
+              if (segment.type === 'text' && trimTerm(segment.value).length >= 2) {
+                parts.push(results[cursor++] || segment.value);
               }
-              parts = [];
-              item.segments.forEach(function (segment) {
-                if (segment.type === 'text' && trimTerm(segment.value).length >= 2) {
-                  parts.push(pool[cursor++] || segment.value);
-                }
-              });
-              cache[lang][item.orig] = assembleFromSegments(item.segments, parts);
             });
-            done(null);
-          }
-        });
-      })(i, chunks[i]);
+            cache[lang][item.orig] = assembleFromSegments(item.segments, parts);
+          });
+          done(null);
+        } else {
+          next();
+        }
+      });
+    }
+
+    for (var w = 0; w < Math.min(CONCURRENCY, toSend.length); w++) {
+      next();
     }
   }
 
-  function googleTranslate(texts, targetLang, cb) {
-    var SEP = '\n||||\n';
+  function googleTranslate(text, targetLang, cb) {
     var url = 'https://translate.googleapis.com/translate_a/single'
       + '?client=gtx&sl=auto&tl=' + encodeURIComponent(targetLang) + '&dt=t'
-      + '&q=' + encodeURIComponent(texts.join(SEP));
+      + '&q=' + encodeURIComponent(text);
     fetch(url)
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (data) {
         var raw = '';
         if (data && data[0]) data[0].forEach(function (s) { if (s && s[0]) raw += s[0]; });
-        cb(null, raw.split('||||').map(function (s) { return s.replace(/^\n|\n$/g, ''); }));
+        cb(null, raw);
       })
       .catch(function (e) { cb(e, null); });
   }
