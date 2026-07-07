@@ -2,6 +2,7 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.10.4 — glossary: fix double-encoding in CSV fetch (spaces in filename caused 404)
  * v1.10.3 — glossary: clearer load failure status; supports Translation Glossary.js fallback
  * v1.10.2 — glossary: translate outermost blocks (Rise splits terms across spans);
  *           share glossary with code blocks via sessionStorage
@@ -17,7 +18,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.10.3';
+  window.__riseTranslateVersion = '1.10.4';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -784,7 +785,7 @@
   }
 
   function fetchUrlText(url) {
-    return fetch(encodeURI(url).replace(/#/g, '%23'), { credentials: 'same-origin' }).then(function (r) {
+    return fetch(url.replace(/#/g, '%23'), { credentials: 'same-origin' }).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
     });
