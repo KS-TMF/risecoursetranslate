@@ -2,6 +2,7 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.10.3 — glossary: clearer load failure status; supports Translation Glossary.js fallback
  * v1.10.2 — glossary: translate outermost blocks (Rise splits terms across spans);
  *           share glossary with code blocks via sessionStorage
  * v1.10.1 — code blocks: sessionStorage sync fallback for Rise iframe nesting
@@ -16,9 +17,9 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.10.2';
+  window.__riseTranslateVersion = '1.10.3';
   var scriptElRef = document.currentScript;
-  var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv'];
+  var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
   var LANGUAGES = [
     { code: 'af', label: 'Afrikaans' },
@@ -770,11 +771,13 @@
       console.info('[risecoursetranslate] Glossary loaded:', glossary.keep.length, 'protected term(s) from', source);
       window.__riseGlossaryCount = glossary.keep.length;
       window.__riseGlossarySource = source;
+      window.__riseGlossaryStatus = 'ok';
       onGlossaryReady();
       done();
     } catch (e) {
       glossary = emptyGlossary();
       window.__riseGlossaryCount = 0;
+      window.__riseGlossaryStatus = 'parse-error';
       console.warn('[risecoursetranslate] Glossary parse error (' + source + '):', e.message);
       done();
     }
@@ -805,7 +808,8 @@
       glossary = emptyGlossary();
       window.__riseGlossaryCount = 0;
       window.__riseGlossarySource = null;
-      console.warn('[risecoursetranslate] Glossary not loaded. Run Update Glossary to sync Translation Glossary.csv into index.html.');
+      window.__riseGlossaryStatus = 'missing';
+      console.error('[risecoursetranslate] GLOSSARY NOT LOADED. Run Update Glossary on Translation Glossary.csv — terms will translate until this is fixed.');
       return done();
     }
     fetchUrlText(urls[idx])
@@ -962,7 +966,7 @@
     var script = getScriptEl();
     var path, urls;
     if (inline) {
-      return applyGlossaryFromText(inline, 'embedded-csv', done);
+      return applyGlossaryFromText(inline, window.__riseGlossaryCsv ? 'window-csv' : 'embedded-csv', done);
     }
     if (script && script.getAttribute('data-glossary-url')) {
       return loadGlossaryFromUrls([script.getAttribute('data-glossary-url')], 0, done);
