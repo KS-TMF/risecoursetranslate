@@ -1182,6 +1182,7 @@
   function batchTranslate(texts, lang, done) {
     var jobs = texts.map(function (orig) { return prepareTranslationJob(orig, lang); });
     var toSend = [];
+    var i, j, job, seg;
     jobs.forEach(function (item) {
       if (item.override) return;
       item.segments.forEach(function (segment) {
@@ -1198,60 +1199,91 @@
       return done(null);
     }
 
-    // Translate each text individually (no separator that Google can corrupt)
-    // with controlled concurrency to avoid rate limits.
-    var results = new Array(toSend.length);
-    var idx = 0;
-    var finished = 0;
+    var chunks = chunkArray(toSend, 8);
+    var pending = chunks.length;
     var errored = null;
-    var CONCURRENCY = 6;
+    var resultsByChunk = new Array(chunks.length);
 
-    function next() {
-      if (errored) return;
-      var myIdx = idx++;
-      if (myIdx >= toSend.length) return;
-      googleTranslate(toSend[myIdx], lang, function (err, translated) {
-        if (errored) return;
-        if (err) { errored = err; return done(err); }
-        results[myIdx] = translated;
-        finished++;
-        if (finished === toSend.length) {
-          var cursor = 0;
-          jobs.forEach(function (item) {
-            if (item.override) {
-              cache[lang][item.orig] = item.override;
-              return;
+    for (i = 0; i < chunks.length; i++) {
+      (function (chunkIdx, chunk) {
+        googleTranslate(chunk, lang, function (err, results) {
+          if (errored) return;
+          if (err) { errored = err; return done(err); }
+          resultsByChunk[chunkIdx] = results || [];
+          if (--pending === 0) {
+            var pool = [];
+            var cursor = 0;
+            var parts;
+            for (j = 0; j < resultsByChunk.length; j++) {
+              pool = pool.concat(resultsByChunk[j]);
             }
-            var parts = [];
-            item.segments.forEach(function (segment) {
-              if (segment.type === 'text' && trimTerm(segment.value).length >= 2) {
-                parts.push(results[cursor++] || segment.value);
+            jobs.forEach(function (item) {
+              if (item.override) {
+                cache[lang][item.orig] = item.override;
+                return;
               }
+              parts = [];
+              item.segments.forEach(function (segment) {
+                if (segment.type === 'text' && trimTerm(segment.value).length >= 2) {
+                  parts.push(pool[cursor++] || segment.value);
+                }
+              });
+              cache[lang][item.orig] = assembleFromSegments(item.segments, parts);
             });
-            cache[lang][item.orig] = assembleFromSegments(item.segments, parts);
-          });
-          done(null);
-        } else {
-          next();
-        }
-      });
-    }
-
-    for (var w = 0; w < Math.min(CONCURRENCY, toSend.length); w++) {
-      next();
+            done(null);
+          }
+        });
+      })(i, chunks[i]);
     }
   }
 
-  function googleTranslate(text, targetLang, cb) {
+  function googleTranslate(texts, targetLang, cb) {
+    if (texts.length === 1) {
+      var singleUrl = 'https://translate.googleapis.com/translate_a/single'
+        + '?client=gtx&sl=auto&tl=' + encodeURIComponent(targetLang) + '&dt=t'
+        + '&q=' + encodeURIComponent(texts[0]);
+      return fetch(singleUrl)
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          var raw = '';
+          if (data && data[0]) data[0].forEach(function (s) { if (s && s[0]) raw += s[0]; });
+          cb(null, [raw]);
+        })
+        .catch(function (e) { cb(e, null); });
+    }
+    var SEP = '\n\u2022\u2022\u2022\n';
     var url = 'https://translate.googleapis.com/translate_a/single'
       + '?client=gtx&sl=auto&tl=' + encodeURIComponent(targetLang) + '&dt=t'
-      + '&q=' + encodeURIComponent(text);
+      + '&q=' + encodeURIComponent(texts.join(SEP));
     fetch(url)
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (data) {
         var raw = '';
         if (data && data[0]) data[0].forEach(function (s) { if (s && s[0]) raw += s[0]; });
-        cb(null, raw);
+        var parts = raw.split(/\u2022\u2022\u2022/).map(function (s) { return s.replace(/^\n|\n$/g, ''); });
+        if (parts.length !== texts.length) {
+          // Separator was corrupted — fall back to individual requests
+          var results = [];
+          var done2 = 0;
+          texts.forEach(function (t, ti) {
+            var u = 'https://translate.googleapis.com/translate_a/single'
+              + '?client=gtx&sl=auto&tl=' + encodeURIComponent(targetLang) + '&dt=t'
+              + '&q=' + encodeURIComponent(t);
+            fetch(u)
+              .then(function (r) { return r.json(); })
+              .then(function (d) {
+                var r = '';
+                if (d && d[0]) d[0].forEach(function (s) { if (s && s[0]) r += s[0]; });
+                results[ti] = r;
+              })
+              .catch(function () { results[ti] = t; })
+              .finally(function () {
+                if (++done2 === texts.length) cb(null, results);
+              });
+          });
+          return;
+        }
+        cb(null, parts);
       })
       .catch(function (e) { cb(e, null); });
   }
