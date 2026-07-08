@@ -2,6 +2,7 @@
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/Moyour/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * v1.10.6 — translate each text individually (no separator Google can corrupt per-language)
  * v1.10.5 — glossary: word-boundary matching so short terms like "IT" don't match inside words
  * v1.10.4 — glossary: fix double-encoding in CSV fetch (spaces in filename caused 404)

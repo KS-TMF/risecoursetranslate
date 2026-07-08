@@ -25,6 +25,14 @@ Paste once in **`scormcontent/index.html`**. **Your team does not update this.**
 
 `@main` always uses the latest version on GitHub — no new link when we push fixes.
 
+**Direct GitHub (bypass CDN cache)** — use this if jsDelivr is serving a stale version:
+
+```html
+<script src="https://raw.githubusercontent.com/Moyour/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+```
+
+> Switch back to the jsDelivr URL above once the CDN has caught up — it's faster for end users.
+
 **Optional frozen version** (only change if you choose to upgrade later):
 
 ```html
