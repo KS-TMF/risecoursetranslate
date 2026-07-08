@@ -1124,7 +1124,9 @@
   function getTranslateBlocks() {
     var blocks = [];
     var seen = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
+    var DEBUG = window.__riseTranslateDebug;
     getTranslateRoots().forEach(function (root) {
+      if (DEBUG) console.log('[RT DEBUG] root:', root === document.body ? 'document.body' : root);
       root.querySelectorAll(BLOCK_SEL).forEach(function (el) {
         if (seen && seen.has(el)) return;
         if (el.closest && (el.closest('#' + BAR_ID) || el.closest('.rt-panel'))) return;
@@ -1134,15 +1136,23 @@
         // Rise often splits one phrase across nested spans. Translate the
         // outermost matching block so glossary terms like "Digital Twin" stay
         // intact instead of being split across child elements.
-        if (el.parentElement && el.parentElement.closest(BLOCK_SEL)) return;
+        if (el.parentElement && el.parentElement.closest(BLOCK_SEL)) {
+          if (DEBUG) console.log('[RT DEBUG] SKIPPED (nested):', el.tagName, el.className, '"' + (el.textContent || '').slice(0, 60) + '…"');
+          return;
+        }
         var text = el.textContent;
         if (!text || trimTerm(text).length < 2) return;
         // Skip text that looks like video player metadata
-        if (looksLikeMediaUI(trimTerm(text))) return;
+        if (looksLikeMediaUI(trimTerm(text))) {
+          if (DEBUG) console.log('[RT DEBUG] SKIPPED (mediaUI):', el.tagName, '"' + text.slice(0, 60) + '…"');
+          return;
+        }
         if (seen) seen.add(el);
+        if (DEBUG) console.log('[RT DEBUG] SELECTED:', el.tagName, el.className, '"' + (text || '').slice(0, 80) + '…"');
         blocks.push(el);
       });
     });
+    if (DEBUG) console.log('[RT DEBUG] Total blocks selected:', blocks.length);
     return blocks;
   }
 
