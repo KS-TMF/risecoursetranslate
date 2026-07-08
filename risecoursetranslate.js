@@ -3,6 +3,9 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/Moyour/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.10.11 — sidebar fix: never collapse structural containers (Rise modules) into one
+ *            blob; preserve DOM structure on translate AND on Reset (restore text-node
+ *            values instead of textContent, which was deleting lesson-card elements)
  * v1.10.10 — skip video player elements (SKIP_ANCESTORS) and unambiguous media-UI text
  * v1.10.6 — translate each text individually (no separator Google can corrupt per-language)
  * v1.10.5 — glossary: word-boundary matching so short terms like "IT" don't match inside words
@@ -22,7 +25,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.10.10';
+  window.__riseTranslateVersion = '1.10.11';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -85,6 +88,10 @@
   ];
   var cache             = {};
   var originalMap       = new Map();
+  // Per-block snapshot of original text-node values, so a Reset can restore the
+  // text WITHOUT using textContent (which would delete child elements and
+  // destroy the block's structure — e.g. Rise sidebar lesson cards).
+  var originalNodes     = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
   var isObserving       = false;
   var observer          = null;
   var activeTranslation = null;
@@ -1127,6 +1134,34 @@
     return false;
   }
 
+  // Line-level elements each represent a separate line/item of content (as
+  // opposed to inline span/a/label/button used to style parts of one phrase).
+  var LINE_LEVEL_SEL = 'h1,h2,h3,h4,h5,h6,p,li,td,th,blockquote,figcaption,dt,dd';
+
+  // True when el contains its own line-level sub-blocks with text — i.e. it is a
+  // structural CONTAINER (e.g. a Rise module holding several lessons), not a
+  // single translatable line.
+  function hasLineLevelChild(el) {
+    var kids = el.querySelectorAll(LINE_LEVEL_SEL);
+    for (var i = 0; i < kids.length; i++) {
+      if (trimTerm(kids[i].textContent).length >= 2) return true;
+    }
+    return false;
+  }
+
+  // True when an ancestor is itself a LEAF block (a line with no line-level
+  // children). Used to keep only the outermost leaf: inline <span>/<a> inside a
+  // <p> or lesson <li> are skipped, but structural-container ancestors (a
+  // module) are transparent, so items nested inside them are still translated.
+  function hasLeafBlockAncestor(el) {
+    var anc = el.parentElement;
+    while (anc) {
+      if (anc.matches && anc.matches(BLOCK_SEL) && !hasLineLevelChild(anc)) return true;
+      anc = anc.parentElement;
+    }
+    return false;
+  }
+
   function getTranslateBlocks() {
     var blocks = [];
     var seen = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
@@ -1137,10 +1172,14 @@
         if (el.closest && el.closest('script,style,noscript')) return;
         // Skip elements inside known video/media player containers.
         if (el.closest && el.closest(SKIP_ANCESTORS)) return;
-        // Rise often splits one phrase across nested spans. Translate the
-        // outermost matching block so glossary terms like "Digital Twin" stay
-        // intact instead of being split across child elements.
-        if (el.parentElement && el.parentElement.closest(BLOCK_SEL)) return;
+        // Never translate a structural container as one unit — that collapses
+        // every child line into a single blob (e.g. a Rise module's lessons).
+        // Let its inner line-level blocks be picked up individually instead.
+        if (hasLineLevelChild(el)) return;
+        // Rise often splits one phrase across nested inline spans. Translate the
+        // outermost LEAF block so glossary terms like "Digital Twin" stay intact
+        // instead of being split, but don't re-grab inline children.
+        if (hasLeafBlockAncestor(el)) return;
         var text = el.textContent;
         if (!text || trimTerm(text).length < 2) return;
         // Skip text that is clearly video player metadata.
@@ -1153,22 +1192,28 @@
   }
 
   function setBlockTranslatedText(el, original, translated) {
-    var lead = (original.match(/^\s*/) || [''])[0];
-    var trail = (original.match(/\s*$/) || [''])[0];
     var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
     var nodes = [];
     var n;
     while ((n = walker.nextNode())) nodes.push(n);
-    if (nodes.length === 1) {
-      nodes[0].nodeValue = lead + translated + trail;
+    // Whitespace-only nodes are formatting between inline elements; they must be
+    // preserved so the element's layout/structure is not destroyed. Only the
+    // "meaningful" nodes carry actual words.
+    var meaningful = nodes.filter(function (nd) { return trimTerm(nd.nodeValue).length >= 1; });
+    if (meaningful.length === 0) { el.textContent = translated; return; }
+    if (meaningful.length === 1) {
+      var only = meaningful[0];
+      var l = (only.nodeValue.match(/^\s*/) || [''])[0];
+      var t = (only.nodeValue.match(/\s*$/) || [''])[0];
+      only.nodeValue = l + translated + t;
       return;
     }
-    if (nodes.length > 1) {
-      nodes[0].nodeValue = lead + translated;
-      for (var i = 1; i < nodes.length; i++) nodes[i].nodeValue = '';
-      return;
-    }
-    el.textContent = translated;
+    // Multiple meaningful nodes = a single phrase Rise split across inline spans.
+    // Put the whole translation in the first, clear the other word-bearing nodes,
+    // and leave whitespace nodes untouched.
+    var lead0 = (meaningful[0].nodeValue.match(/^\s*/) || [''])[0];
+    meaningful[0].nodeValue = lead0 + translated;
+    for (var i = 1; i < meaningful.length; i++) meaningful[i].nodeValue = '';
   }
 
   /* ── TEXT NODES ─────────────────────────────────────────────────── */
@@ -1177,7 +1222,16 @@
     var blocks = getTranslateBlocks();
     var toTranslate = [];
     blocks.forEach(function (el) {
-      if (!originalMap.has(el)) originalMap.set(el, el.textContent);
+      if (!originalMap.has(el)) {
+        originalMap.set(el, el.textContent);
+        if (originalNodes && !originalNodes.has(el)) {
+          var snap = [];
+          var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+          var tn;
+          while ((tn = w.nextNode())) snap.push({ node: tn, value: tn.nodeValue });
+          originalNodes.set(el, snap);
+        }
+      }
       var orig = trimTerm(originalMap.get(el));
       if (orig.length < 2) return;
       cache[lang] = cache[lang] || {};
@@ -1341,7 +1395,19 @@
 
   /* ── RESTORE ─────────────────────────────────────────────────────── */
   function restorePage() {
-    originalMap.forEach(function (orig, el) { el.textContent = orig; });
+    originalMap.forEach(function (orig, el) {
+      var snap = originalNodes && originalNodes.get(el);
+      if (snap && snap.length) {
+        // Restore each original text-node value in place. Structure (child
+        // elements) is left untouched, so lesson cards / spans survive.
+        snap.forEach(function (rec) {
+          try { rec.node.nodeValue = rec.value; } catch (e) {}
+        });
+        return;
+      }
+      // Fallback only when no snapshot exists (should be rare).
+      el.textContent = orig;
+    });
     document.body.style.direction = '';
   }
 
