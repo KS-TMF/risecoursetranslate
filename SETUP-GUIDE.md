@@ -190,6 +190,19 @@ automatically. No changes needed to `index.html` for this.
 
 Open `test.html` in a browser (with a local server if needed for glossary load).
 
+## Test branch (@test)
+
+The repository uses two branches so changes can be tried before they reach live courses:
+
+- **main** is production. Live courses load from @main and only see changes once they are merged in.
+- **test** is for work in progress. Point a test course's script links at @test instead of @main, and it loads the test branch without touching any live course.
+
+Example (a code block on the test branch):
+
+    <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@test/translate-core.js" defer></script>
+
+When a change on test is proven, merge test into main and live courses pick it up after the usual cache purge. Test and production live in the same repo, so there is nothing separate to keep in sync.
+
 ---
 
 *Last updated: July 2026 — v1.10.4 fixes glossary CSV fetch for filenames with spaces. See CHAT-SUMMARY.md for full history.*
