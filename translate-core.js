@@ -31,7 +31,7 @@
   // Mark this document so a course-level bar (risecoursetranslate.js) knows
   // this block manages its own translation, and skips walking its insides.
   try { document.documentElement.setAttribute("data-tc-managed", "1"); } catch (e) {}
-  try { window.TRANSLATE_CORE_VERSION = "1.2"; } catch (e) {}
+  try { window.TRANSLATE_CORE_VERSION = "1.2.1"; } catch (e) {}
   var STORAGE_KEY = "rise_course_lang";
   var GLOSSARY_STORAGE_KEY = "rise_course_glossary_keep";
   try { window.TC_STATS = window.TC_STATS || { observerFires: 0, cacheReapplies: 0, fullPasses: 0, netFetches: 0 }; } catch (e) {}
@@ -392,6 +392,8 @@
 
   function resetAll() {
     if (!root) return;
+    applyGen++;          // supersede any in-flight translation pass, so it cannot paint over the reset
+    rerunQueued = false; // and drop any queued follow-up pass
     translating = true;
     try {
       collectAttrTargets().forEach(function (t) {
