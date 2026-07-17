@@ -1,0 +1,7 @@
+# One-time setup:
+# 1. Copy this file to: glossary-course-folder.txt
+# 2. Paste the full path to your scormcontent folder below
+# 3. Double-click "Update Glossary" after editing Translation Glossary.csv
+#
+# Example (Mac):
+# /Users/yourname/Desktop/MyCourse/scormcontent
