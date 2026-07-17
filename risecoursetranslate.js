@@ -1,19 +1,7 @@
 /*!
  * risecoursetranslate.js — Rise & Storyline Course Translator
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
- * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
- * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
- * v1.10.11 — sidebar fix: never collapse structural containers (Rise modules) into one
- *            blob; preserve DOM structure on translate AND on Reset (restore text-node
- *            values instead of textContent, which was deleting lesson-card elements)
- * v1.10.10 — skip video player elements (SKIP_ANCESTORS) and unambiguous media-UI text
- * v1.10.6 — translate each text individually (no separator Google can corrupt per-language)
- * v1.10.5 — glossary: word-boundary matching so short terms like "IT" don't match inside words
- * v1.10.4 — glossary: fix double-encoding in CSV fetch (spaces in filename caused 404)
- * v1.10.3 — glossary: clearer load failure status; supports Translation Glossary.js fallback
- * v1.10.2 — glossary: translate outermost blocks (Rise splits terms across spans);
- *           share glossary with code blocks via sessionStorage
- * v1.10.1 — code blocks: sessionStorage sync fallback for Rise iframe nesting
+ * <script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * v1.10.0 — code-block aware: broadcasts the active language to any Rise
  *           code block running translate-core.js, and skips walking the
  *           insides of those blocks so they are not double-translated.
@@ -25,9 +13,9 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.10.11';
+  window.__riseTranslateVersion = '1.10.0';
   var scriptElRef = document.currentScript;
-  var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
+  var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv'];
 
   var LANGUAGES = [
     { code: 'af', label: 'Afrikaans' },
@@ -78,7 +66,6 @@
   ];
 
   var STORAGE_KEY       = 'rise_course_lang';
-  var GLOSSARY_STORAGE_KEY = 'rise_course_glossary_keep';
   var BAR_ID            = 'rise-translate-bar';
   var START_SELECTORS   = [
     'a.cover__header-content-action-link',
@@ -88,10 +75,6 @@
   ];
   var cache             = {};
   var originalMap       = new Map();
-  // Per-block snapshot of original text-node values, so a Reset can restore the
-  // text WITHOUT using textContent (which would delete child elements and
-  // destroy the block's structure — e.g. Rise sidebar lesson cards).
-  var originalNodes     = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
   var isObserving       = false;
   var observer          = null;
   var activeTranslation = null;
@@ -102,26 +85,6 @@
   var placeBarPending   = false;
   var panelWrapRef      = null;
   var BLOCK_SEL         = 'h1,h2,h3,h4,h5,h6,p,li,td,th,blockquote,figcaption,dt,dd,button,a,label,span,[class*="blocks-"]';
-  // Ancestor elements whose subtree should never be translated (video/media players).
-  var SKIP_ANCESTORS    = [
-    'video','audio',
-    '[class*="player"]','[class*="Player"]',
-    '[class*="video-"]','[class*="Video"]',
-    '[class*="media-control"]','[class*="MediaControl"]',
-    '[class*="vjs-"]',        // Video.js
-    '[class*="plyr"]',        // Plyr
-    '[class*="mejs"]',        // MediaElement.js
-    '[class*="wistia"]',      // Wistia
-    '[class*="jw-"]',         // JW Player
-    '[class*="brightcove"]',  // Brightcove
-    '[class*="kaltura"]',     // Kaltura
-    '[class*="flowplayer"]',  // Flowplayer
-    '[class*="vimeo"]',       // Vimeo embed shell
-    '[class*="caption-window"]','[class*="captions-"]',
-    '[class*="playback-speed"]','[class*="speed-control"]',
-    '[role="timer"]',
-    '[data-notranslate]'
-  ].join(',');
   var glossary          = { keep: [], overrides: {} };
 
   /* ── STYLES ─────────────────────────────────────────────────────── */
@@ -253,16 +216,13 @@
         scheduleCoverPlacementRetries();
         var saved = getSavedLang();
         if (saved) {
-          activeTranslation = saved;
           setTriggerLabel(saved);
           translatePage(saved);
-          broadcastLangToBlocks(saved);
         }
         initObserver();
         // Keep code blocks in sync as Rise mounts them on scroll and on
         // lesson change. A block ignores a repeat of the language it
         // already shows (see translate-core.js), so this stays cheap.
-        broadcastLangToBlocks(activeTranslation || getSavedLang() || 'en');
         setInterval(function () {
           broadcastLangToBlocks(activeTranslation || getSavedLang() || 'en');
         }, 1500);
@@ -677,20 +637,12 @@
      them — this section is purely additive. See CODE-BLOCKS.md. */
   function broadcastLangToBlocks(code) {
     var lang = code || 'en';
-    if (lang === 'en') clearSavedLang();
-    else saveLang(lang);
     (function post(win) {
-      var i, f, frames;
-      try {
-        for (i = 0; win.frames && i < win.frames.length; i++) {
-          try { win.frames[i].postMessage({ type: 'rise-lang', lang: lang }, '*'); } catch (e) {}
-          try { post(win.frames[i]); } catch (e) {}
-        }
-      } catch (e) {}
+      var frames;
       try { frames = win.document.querySelectorAll('iframe'); } catch (e) { return; }
-      frames.forEach(function (frame) {
-        try { if (frame.contentWindow) frame.contentWindow.postMessage({ type: 'rise-lang', lang: lang }, '*'); } catch (e) {}
-        try { if (frame.contentWindow) post(frame.contentWindow); } catch (e) {}
+      frames.forEach(function (f) {
+        try { if (f.contentWindow) f.contentWindow.postMessage({ type: 'rise-lang', lang: lang }, '*'); } catch (e) {}
+        try { if (f.contentWindow) post(f.contentWindow); } catch (e) {}
       });
     })(window);
   }
@@ -739,7 +691,7 @@
   }
 
   function getInlineGlossaryText() {
-    var el, script, elId, prev, next, b64;
+    var el, script, elId, prev, b64;
     if (window.__riseGlossaryCsv) return window.__riseGlossaryCsv;
     el = document.getElementById('rise-glossary');
     if (el) return el.textContent;
@@ -758,23 +710,7 @@
     if (prev && prev.getAttribute('data-rise-glossary') !== null) {
       return prev.textContent;
     }
-    next = script.nextElementSibling;
-    if (next && next.getAttribute('data-rise-glossary') !== null) {
-      return next.textContent;
-    }
     return null;
-  }
-
-  function publishGlossaryStorage() {
-    try {
-      sessionStorage.setItem(GLOSSARY_STORAGE_KEY, JSON.stringify(glossary.keep));
-    } catch (e) {}
-  }
-
-  function onGlossaryReady() {
-    publishGlossaryStorage();
-    cache = {};
-    if (activeTranslation) translatePage(activeTranslation);
   }
 
   function extractCsvFromGlossaryJs(text) {
@@ -803,20 +739,17 @@
       console.info('[risecoursetranslate] Glossary loaded:', glossary.keep.length, 'protected term(s) from', source);
       window.__riseGlossaryCount = glossary.keep.length;
       window.__riseGlossarySource = source;
-      window.__riseGlossaryStatus = 'ok';
-      onGlossaryReady();
       done();
     } catch (e) {
       glossary = emptyGlossary();
       window.__riseGlossaryCount = 0;
-      window.__riseGlossaryStatus = 'parse-error';
       console.warn('[risecoursetranslate] Glossary parse error (' + source + '):', e.message);
       done();
     }
   }
 
   function fetchUrlText(url) {
-    return fetch(url.replace(/#/g, '%23'), { credentials: 'same-origin' }).then(function (r) {
+    return fetch(encodeURI(url).replace(/#/g, '%23'), { credentials: 'same-origin' }).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
     });
@@ -840,8 +773,7 @@
       glossary = emptyGlossary();
       window.__riseGlossaryCount = 0;
       window.__riseGlossarySource = null;
-      window.__riseGlossaryStatus = 'missing';
-      console.error('[risecoursetranslate] GLOSSARY NOT LOADED. Run Update Glossary on Translation Glossary.csv — terms will translate until this is fixed.');
+      console.warn('[risecoursetranslate] Glossary not loaded. Run Update Glossary to sync Translation Glossary.csv into index.html.');
       return done();
     }
     fetchUrlText(urls[idx])
@@ -922,7 +854,6 @@
   function finalizeGlossary(g) {
     g.keep = g.keep.map(trimTerm).filter(Boolean);
     g.keep = g.keep.filter(function (t, i) { return g.keep.indexOf(t) === i; });
-    g.keep.sort(function (a, b) { return b.length - a.length; });
     return g;
   }
 
@@ -998,7 +929,7 @@
     var script = getScriptEl();
     var path, urls;
     if (inline) {
-      return applyGlossaryFromText(inline, window.__riseGlossaryCsv ? 'window-csv' : 'embedded-csv', done);
+      return applyGlossaryFromText(inline, 'embedded-csv', done);
     }
     if (script && script.getAttribute('data-glossary-url')) {
       return loadGlossaryFromUrls([script.getAttribute('data-glossary-url')], 0, done);
@@ -1021,13 +952,6 @@
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  function buildTermPattern(term) {
-    var escaped = escapeRegex(term);
-    var prefix = /^\w/.test(term) ? '\\b' : '';
-    var suffix = /\w$/.test(term) ? '\\b' : '';
-    return prefix + escaped + suffix;
-  }
-
   function findGlossaryMatches(text, keepList) {
     var all = [];
     var i, term, re, m;
@@ -1035,7 +959,7 @@
     for (i = 0; i < keepList.length; i++) {
       term = keepList[i];
       if (!term) continue;
-      re = new RegExp(buildTermPattern(term), 'gi');
+      re = new RegExp(escapeRegex(term), 'gi');
       while ((m = re.exec(text)) !== null) {
         all.push({ start: m.index, end: m.index + m[0].length });
         if (m[0].length === 0) re.lastIndex++;
@@ -1109,59 +1033,6 @@
     return roots;
   }
 
-  // Detect text that is unambiguously video/media player UI.
-  // Each rule requires TWO independent signals so ordinary course content
-  // that happens to contain a number or the word "captions" is never skipped.
-  var PURE_TIMESTAMP_RE = /^\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:\/\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*$/;
-  var PURE_SPEED_RE     = /^\s*[\d.]+x\s*$/;
-  function looksLikeMediaUI(text) {
-    // Pure timestamp — "00:00" or "00:00 / 01:33"
-    if (PURE_TIMESTAMP_RE.test(text)) return true;
-    // Pure single speed value — "1x", "1.5x"
-    if (PURE_SPEED_RE.test(text)) return true;
-    // Two or more speeds glued together at the very start — "1x2x1.75x…"
-    if (/^\s*(?:[\d.]+x){2,}/.test(text)) return true;
-    // Timestamp AND speed values in the same string → video controls region
-    // e.g. "00:00 / 01:33Current time 00:00 Duration 01:331x2x1.75x…"
-    if (/\d{1,2}:\d{2}/.test(text) && /(?:[\d.]+x\s*){2,}/.test(text)) return true;
-    // Timestamp AND known video-control keyword → accessibility label block
-    if (/\d{1,2}:\d{2}/.test(text) &&
-        /\b(?:current[\s-]time|elapsed[\s-]time|duration|remaining[\s-]time)\b/i.test(text)) return true;
-    // Caption control label: must start with "Captions"/"Subtitles" and end with
-    // a short word or language tag — e.g. "Captions off", "Captions offSpanish (Spain)"
-    // Deliberately does NOT match a full sentence like "Captions are provided below."
-    if (/^\s*(?:captions?|subtitles?)\s+(?:off|on)(?:\s*\S{0,40})?\s*$/i.test(text)) return true;
-    return false;
-  }
-
-  // Line-level elements each represent a separate line/item of content (as
-  // opposed to inline span/a/label/button used to style parts of one phrase).
-  var LINE_LEVEL_SEL = 'h1,h2,h3,h4,h5,h6,p,li,td,th,blockquote,figcaption,dt,dd';
-
-  // True when el contains its own line-level sub-blocks with text — i.e. it is a
-  // structural CONTAINER (e.g. a Rise module holding several lessons), not a
-  // single translatable line.
-  function hasLineLevelChild(el) {
-    var kids = el.querySelectorAll(LINE_LEVEL_SEL);
-    for (var i = 0; i < kids.length; i++) {
-      if (trimTerm(kids[i].textContent).length >= 2) return true;
-    }
-    return false;
-  }
-
-  // True when an ancestor is itself a LEAF block (a line with no line-level
-  // children). Used to keep only the outermost leaf: inline <span>/<a> inside a
-  // <p> or lesson <li> are skipped, but structural-container ancestors (a
-  // module) are transparent, so items nested inside them are still translated.
-  function hasLeafBlockAncestor(el) {
-    var anc = el.parentElement;
-    while (anc) {
-      if (anc.matches && anc.matches(BLOCK_SEL) && !hasLineLevelChild(anc)) return true;
-      anc = anc.parentElement;
-    }
-    return false;
-  }
-
   function getTranslateBlocks() {
     var blocks = [];
     var seen = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
@@ -1170,20 +1041,9 @@
         if (seen && seen.has(el)) return;
         if (el.closest && (el.closest('#' + BAR_ID) || el.closest('.rt-panel'))) return;
         if (el.closest && el.closest('script,style,noscript')) return;
-        // Skip elements inside known video/media player containers.
-        if (el.closest && el.closest(SKIP_ANCESTORS)) return;
-        // Never translate a structural container as one unit — that collapses
-        // every child line into a single blob (e.g. a Rise module's lessons).
-        // Let its inner line-level blocks be picked up individually instead.
-        if (hasLineLevelChild(el)) return;
-        // Rise often splits one phrase across nested inline spans. Translate the
-        // outermost LEAF block so glossary terms like "Digital Twin" stay intact
-        // instead of being split, but don't re-grab inline children.
-        if (hasLeafBlockAncestor(el)) return;
+        if (el.querySelector(BLOCK_SEL)) return;
         var text = el.textContent;
         if (!text || trimTerm(text).length < 2) return;
-        // Skip text that is clearly video player metadata.
-        if (looksLikeMediaUI(trimTerm(text))) return;
         if (seen) seen.add(el);
         blocks.push(el);
       });
@@ -1192,28 +1052,22 @@
   }
 
   function setBlockTranslatedText(el, original, translated) {
+    var lead = (original.match(/^\s*/) || [''])[0];
+    var trail = (original.match(/\s*$/) || [''])[0];
     var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
     var nodes = [];
     var n;
     while ((n = walker.nextNode())) nodes.push(n);
-    // Whitespace-only nodes are formatting between inline elements; they must be
-    // preserved so the element's layout/structure is not destroyed. Only the
-    // "meaningful" nodes carry actual words.
-    var meaningful = nodes.filter(function (nd) { return trimTerm(nd.nodeValue).length >= 1; });
-    if (meaningful.length === 0) { el.textContent = translated; return; }
-    if (meaningful.length === 1) {
-      var only = meaningful[0];
-      var l = (only.nodeValue.match(/^\s*/) || [''])[0];
-      var t = (only.nodeValue.match(/\s*$/) || [''])[0];
-      only.nodeValue = l + translated + t;
+    if (nodes.length === 1) {
+      nodes[0].nodeValue = lead + translated + trail;
       return;
     }
-    // Multiple meaningful nodes = a single phrase Rise split across inline spans.
-    // Put the whole translation in the first, clear the other word-bearing nodes,
-    // and leave whitespace nodes untouched.
-    var lead0 = (meaningful[0].nodeValue.match(/^\s*/) || [''])[0];
-    meaningful[0].nodeValue = lead0 + translated;
-    for (var i = 1; i < meaningful.length; i++) meaningful[i].nodeValue = '';
+    if (nodes.length > 1) {
+      nodes[0].nodeValue = lead + translated;
+      for (var i = 1; i < nodes.length; i++) nodes[i].nodeValue = '';
+      return;
+    }
+    el.textContent = translated;
   }
 
   /* ── TEXT NODES ─────────────────────────────────────────────────── */
@@ -1222,16 +1076,7 @@
     var blocks = getTranslateBlocks();
     var toTranslate = [];
     blocks.forEach(function (el) {
-      if (!originalMap.has(el)) {
-        originalMap.set(el, el.textContent);
-        if (originalNodes && !originalNodes.has(el)) {
-          var snap = [];
-          var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
-          var tn;
-          while ((tn = w.nextNode())) snap.push({ node: tn, value: tn.nodeValue });
-          originalNodes.set(el, snap);
-        }
-      }
+      if (!originalMap.has(el)) originalMap.set(el, el.textContent);
       var orig = trimTerm(originalMap.get(el));
       if (orig.length < 2) return;
       cache[lang] = cache[lang] || {};
@@ -1304,7 +1149,7 @@
       return done(null);
     }
 
-    var chunks = chunkArray(toSend, 8);
+    var chunks = chunkArray(toSend, 50);
     var pending = chunks.length;
     var errored = null;
     var resultsByChunk = new Array(chunks.length);
@@ -1343,20 +1188,7 @@
   }
 
   function googleTranslate(texts, targetLang, cb) {
-    if (texts.length === 1) {
-      var singleUrl = 'https://translate.googleapis.com/translate_a/single'
-        + '?client=gtx&sl=auto&tl=' + encodeURIComponent(targetLang) + '&dt=t'
-        + '&q=' + encodeURIComponent(texts[0]);
-      return fetch(singleUrl)
-        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function (data) {
-          var raw = '';
-          if (data && data[0]) data[0].forEach(function (s) { if (s && s[0]) raw += s[0]; });
-          cb(null, [raw]);
-        })
-        .catch(function (e) { cb(e, null); });
-    }
-    var SEP = '\n\u2022\u2022\u2022\n';
+    var SEP = '\n||||\n';
     var url = 'https://translate.googleapis.com/translate_a/single'
       + '?client=gtx&sl=auto&tl=' + encodeURIComponent(targetLang) + '&dt=t'
       + '&q=' + encodeURIComponent(texts.join(SEP));
@@ -1365,49 +1197,14 @@
       .then(function (data) {
         var raw = '';
         if (data && data[0]) data[0].forEach(function (s) { if (s && s[0]) raw += s[0]; });
-        var parts = raw.split(/\u2022\u2022\u2022/).map(function (s) { return s.replace(/^\n|\n$/g, ''); });
-        if (parts.length !== texts.length) {
-          // Separator was corrupted — fall back to individual requests
-          var results = [];
-          var done2 = 0;
-          texts.forEach(function (t, ti) {
-            var u = 'https://translate.googleapis.com/translate_a/single'
-              + '?client=gtx&sl=auto&tl=' + encodeURIComponent(targetLang) + '&dt=t'
-              + '&q=' + encodeURIComponent(t);
-            fetch(u)
-              .then(function (r) { return r.json(); })
-              .then(function (d) {
-                var r = '';
-                if (d && d[0]) d[0].forEach(function (s) { if (s && s[0]) r += s[0]; });
-                results[ti] = r;
-              })
-              .catch(function () { results[ti] = t; })
-              .finally(function () {
-                if (++done2 === texts.length) cb(null, results);
-              });
-          });
-          return;
-        }
-        cb(null, parts);
+        cb(null, raw.split('||||').map(function (s) { return s.replace(/^\n|\n$/g, ''); }));
       })
       .catch(function (e) { cb(e, null); });
   }
 
   /* ── RESTORE ─────────────────────────────────────────────────────── */
   function restorePage() {
-    originalMap.forEach(function (orig, el) {
-      var snap = originalNodes && originalNodes.get(el);
-      if (snap && snap.length) {
-        // Restore each original text-node value in place. Structure (child
-        // elements) is left untouched, so lesson cards / spans survive.
-        snap.forEach(function (rec) {
-          try { rec.node.nodeValue = rec.value; } catch (e) {}
-        });
-        return;
-      }
-      // Fallback only when no snapshot exists (should be rare).
-      el.textContent = orig;
-    });
+    originalMap.forEach(function (orig, el) { el.textContent = orig; });
     document.body.style.direction = '';
   }
 

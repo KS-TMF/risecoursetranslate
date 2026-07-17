@@ -77,7 +77,7 @@ Inside the Rise code block's HTML, add one line near the bottom (after your
 own markup and script, so it can see the finished DOM):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/translate-core.js" defer></script>
+<script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/translate-core.js" defer></script>
 ```
 
 See `code-block.html` in this repo for a full worked example — a diagram,

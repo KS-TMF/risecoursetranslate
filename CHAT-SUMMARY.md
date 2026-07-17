@@ -4,7 +4,7 @@
 
 Add translation to Articulate Rise **xAPI** courses via one CDN script line, while keeping a private glossary of terms (ODF, TM Forum, Digital Twin, etc.) **untranslated** in every language, and — as of v1.10.0 — also translating custom HTML/JavaScript **code blocks**, not just Rise's own text and captions.
 
-**Repo:** https://github.com/KS-TMF/risecoursetranslate  
+**Repo:** https://github.com/Moyour/risecoursetranslate  
 **Current version:** v1.10.0 (`@main` on CDN)
 
 **Start here if you're new to this project:** read this file top to bottom
@@ -17,7 +17,7 @@ specifically.
 ## The one line (set once, never change)
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+<script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
 ```
 
 Paste in **`scormcontent/index.html`**.
