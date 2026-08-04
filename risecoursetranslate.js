@@ -3,6 +3,12 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.10.12 — Rise audio transcripts: the transcript panel body renders as
+ *            <section class="transcript-panel__transcript-text"> holding bare
+ *            text, which BLOCK_SEL never matched (the <h3> title did — hence
+ *            "only the title translates"). Added the class to BLOCK_SEL, and
+ *            multiline text segments are now split on newline runs so each
+ *            paragraph is translated separately and blank lines survive.
  * v1.10.11 — sidebar fix: never collapse structural containers (Rise modules) into one
  *            blob; preserve DOM structure on translate AND on Reset (restore text-node
  *            values instead of textContent, which was deleting lesson-card elements)
@@ -25,7 +31,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.10.11';
+  window.__riseTranslateVersion = '1.10.12';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -101,7 +107,7 @@
   var barRef            = null;
   var placeBarPending   = false;
   var panelWrapRef      = null;
-  var BLOCK_SEL         = 'h1,h2,h3,h4,h5,h6,p,li,td,th,blockquote,figcaption,dt,dd,button,a,label,span,[class*="blocks-"]';
+  var BLOCK_SEL         = 'h1,h2,h3,h4,h5,h6,p,li,td,th,blockquote,figcaption,dt,dd,button,a,label,span,[class*="blocks-"],.transcript-panel__transcript-text';
   // Ancestor elements whose subtree should never be translated (video/media players).
   var SKIP_ANCESTORS    = [
     'video','audio',
@@ -1081,12 +1087,29 @@
     }).join('');
   }
 
+  // Transcript bodies (and any other multiline node) arrive as ONE text node
+  // with embedded newlines rendered by white-space:pre-wrap. Split every text
+  // segment on newline runs so each paragraph is translated separately and the
+  // blank-line structure is preserved verbatim. Newline runs ride through as
+  // type:'term' segments, which assembleFromSegments already passes untouched.
+  function splitSegmentsOnNewlines(segments) {
+    var out = [];
+    segments.forEach(function (seg) {
+      if (seg.type !== 'text' || seg.value.indexOf('\n') === -1) { out.push(seg); return; }
+      seg.value.split(/(\n+)/).forEach(function (part) {
+        if (!part) return;
+        out.push(/\n/.test(part) ? { type: 'term', value: part } : { type: 'text', value: part });
+      });
+    });
+    return out;
+  }
+
   function prepareTranslationJob(orig, lang) {
     var override = getOverride(orig, lang);
     if (override) return { orig: orig, override: override };
     return {
       orig: orig,
-      segments: buildSegments(orig, findGlossaryMatches(orig, glossary.keep))
+      segments: splitSegmentsOnNewlines(buildSegments(orig, findGlossaryMatches(orig, glossary.keep)))
     };
   }
 
