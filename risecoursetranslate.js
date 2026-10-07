@@ -3,6 +3,13 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.11.1 — caption fixes: (1) translate cues IN PLACE on the original
+ *           TextTrack (cue.text) so custom Rise caption renderers and native
+ *           captions both show the translation; the generated blob <track>
+ *           is now only a fallback. (2) WebVTT tags (<v Name>, <i>, <c.x>)
+ *           are preserved; only the text between tags is translated.
+ *           (3) failures are logged to the console instead of silent.
+ *           (4) Reset restores original cue text.
  * v1.11.0 — translate WebVTT video caption tracks at runtime using the
  *           existing glossary-aware translation pipeline. Finds <video>
  *           elements with <track kind="captions"/"subtitles">, fetches the
@@ -42,7 +49,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.11.0';
+  window.__riseTranslateVersion = '1.11.1';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -144,6 +151,8 @@
   // Tracks generated translated VTT caption tracks, keyed by sourceKey|lang.
   var translatedVttCache = {};
   var VTT_GENERATED_ATTR = 'data-rise-translate-vtt';
+  // In-place translated cues: [{cue, orig}] so Reset can restore them.
+  var translatedCueStore = [];
 
   /* ── STYLES ─────────────────────────────────────────────────────── */
   var css = [
@@ -1525,39 +1534,116 @@
   // Translate all cue text in a VTT document using the existing glossary-aware
   // pipeline. Only cue text is translated — timing, settings, and structure
   // are preserved exactly. Results are cached in the shared cache[lang] map.
+  // Translate an array of cue strings. WebVTT tags such as <v Name>, <i>,
+  // <c.class>, <00:01.000> are kept verbatim; only the text between tags is
+  // translated. Calls cb(err, map) where map[originalCueText] = translated.
+  function translateCueTexts(texts, lang, cb) {
+    texts = unique(texts.filter(function (t) { return trimTerm(t).length >= 2; }));
+    if (!texts.length) return cb(null, {});
+
+    var parsed = texts.map(function (t) { return t.split(/(<[^>]*>)/); });
+    var pieces = [];
+    parsed.forEach(function (parts) {
+      parts.forEach(function (p, i) {
+        if (i % 2 === 1) return;
+        var core = trimTerm(p);
+        if (core.length >= 2) pieces.push(core);
+      });
+    });
+    pieces = unique(pieces);
+
+    if (!cache[lang]) cache[lang] = {};
+    var missing = pieces.filter(function (t) { return !cache[lang][t]; });
+
+    function build() {
+      var out = {};
+      texts.forEach(function (t, idx) {
+        out[t] = parsed[idx].map(function (p, i) {
+          if (i % 2 === 1) return p;
+          var core = trimTerm(p);
+          var hit = core.length >= 2 ? cache[lang][core] : null;
+          if (!hit) return p;
+          return p.match(/^\s*/)[0] + hit + p.match(/\s*$/)[0];
+        }).join('');
+      });
+      cb(null, out);
+    }
+
+    if (!missing.length) return build();
+    batchTranslate(missing, lang, function (err) {
+      if (err) return cb(err);
+      build();
+    });
+  }
+
+  // Translate all cue text in a VTT document. Timing, settings, and
+  // structure are preserved exactly.
   function translateVttDocument(vttText, lang, cb) {
     var doc = parseWebVtt(vttText);
     var cueTexts = [];
-
     doc.blocks.forEach(function (block) {
-      if (block.type !== 'cue') return;
-      var text = block.text || '';
-      if (trimTerm(text).length >= 2) cueTexts.push(text);
+      if (block.type === 'cue' && block.text) cueTexts.push(block.text);
     });
-
-    cueTexts = unique(cueTexts);
     if (!cueTexts.length) return cb(null, serializeWebVtt(doc));
 
-    if (!cache[lang]) cache[lang] = {};
-
-    var missing = cueTexts.filter(function (text) {
-      return !cache[lang][text];
-    });
-
-    function finish() {
+    translateCueTexts(cueTexts, lang, function (err, map) {
+      if (err) return cb(err);
       doc.blocks.forEach(function (block) {
-        if (block.type !== 'cue') return;
-        if (cache[lang][block.text]) block.text = cache[lang][block.text];
+        if (block.type === 'cue' && map[block.text]) block.text = map[block.text];
       });
       cb(null, serializeWebVtt(doc));
-    }
-
-    if (!missing.length) return finish();
-
-    batchTranslate(missing, lang, function (err) {
-      if (err) return cb(err);
-      finish();
     });
+  }
+
+  // Translate the cues of the ORIGINAL text track in place. This is the
+  // primary path: players that draw their own caption overlay (Rise) read
+  // cue.text from the original track, and native rendering uses it too.
+  // cb(err) — err means "fall back to the injected track".
+  function translateCuesInPlace(trackEl, lang, cb) {
+    var tt = trackEl.track;
+    if (!tt) return cb(new Error('No text track'));
+
+    var originalMode = tt.mode;
+    // Cues only load when the track is not 'disabled'.
+    if (tt.mode === 'disabled') { try { tt.mode = 'hidden'; } catch (e) {} }
+
+    var tries = 0;
+    function check() {
+      var cues = null;
+      try { cues = tt.cues; } catch (e) {}
+
+      if (cues && cues.length) {
+        var list = Array.prototype.slice.call(cues);
+        var texts = list.map(function (c) {
+          return c.__riseOrigText !== undefined ? c.__riseOrigText : c.text;
+        });
+
+        translateCueTexts(texts, lang, function (err, map) {
+          if (activeTranslation !== lang) return cb(new Error('stale'));
+          if (err) return cb(err);
+          list.forEach(function (c, i) {
+            if (c.__riseOrigText === undefined) {
+              c.__riseOrigText = c.text;
+              translatedCueStore.push({ cue: c, orig: c.text });
+            }
+            var tr = map[texts[i]];
+            if (tr) { try { c.text = tr; } catch (e) {} }
+          });
+          trackEl.__riseTranslatedLang = lang;
+          // Leave the track as the course had it, unless it was disabled.
+          if (originalMode === 'disabled') { try { tt.mode = 'disabled'; } catch (e) {} }
+          cb(null);
+        });
+        return;
+      }
+
+      if (++tries > 40) {
+        if (originalMode === 'disabled') { try { tt.mode = 'disabled'; } catch (e) {} }
+        return cb(new Error('Caption cues not loaded'));
+      }
+      setTimeout(check, 150);
+    }
+    check();
   }
 
   function rememberOriginalCaptionModes(video) {
@@ -1623,6 +1709,13 @@
   }
 
   function restoreVideoCaptions() {
+    translatedCueStore.forEach(function (rec) {
+      try { rec.cue.text = rec.orig; delete rec.cue.__riseOrigText; } catch (e) {}
+    });
+    translatedCueStore = [];
+    Array.prototype.forEach.call(document.querySelectorAll('track'), function (t) {
+      try { delete t.__riseTranslatedLang; } catch (e) {}
+    });
     getVideoElements().forEach(function (video) {
       removeGeneratedCaptionTracks(video);
 
@@ -1678,14 +1771,31 @@
         return;
       }
 
-      readVttFromTrack(sourceTrack, function (err, vttText) {
-        if (err || !vttText || activeTranslation !== lang) return;
+      // Already translated in place for this language — nothing to do.
+      if (sourceTrack.__riseTranslatedLang === lang) return;
 
-        translateVttDocument(vttText, lang, function (err2, translatedVtt) {
-          if (err2 || !translatedVtt || activeTranslation !== lang) return;
+      translateCuesInPlace(sourceTrack, lang, function (errIn) {
+        if (!errIn) return;
+        if (activeTranslation !== lang || errIn.message === 'stale') return;
+        console.warn('[risecoursetranslate] In-place caption translation failed, using injected track:', errIn);
 
-          translatedVttCache[translatedKey] = translatedVtt;
-          injectTranslatedVttTrack(video, lang, translatedVtt, sourceKey);
+        readVttFromTrack(sourceTrack, function (err, vttText) {
+          if (err || !vttText) {
+            console.warn('[risecoursetranslate] Could not read caption VTT:', err);
+            return;
+          }
+          if (activeTranslation !== lang) return;
+
+          translateVttDocument(vttText, lang, function (err2, translatedVtt) {
+            if (err2 || !translatedVtt) {
+              console.warn('[risecoursetranslate] Caption translation failed:', err2);
+              return;
+            }
+            if (activeTranslation !== lang) return;
+
+            translatedVttCache[translatedKey] = translatedVtt;
+            injectTranslatedVttTrack(video, lang, translatedVtt, sourceKey);
+          });
         });
       });
     });
