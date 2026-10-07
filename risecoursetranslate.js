@@ -3,6 +3,12 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.11.0 — translate WebVTT video caption tracks at runtime using the
+ *           existing glossary-aware translation pipeline. Finds <video>
+ *           elements with <track kind="captions"/"subtitles">, fetches the
+ *           VTT, translates cue text (preserving timing/settings), and injects
+ *           a new generated track in the chosen language. Reset removes the
+ *           generated track and restores the original caption mode.
  * v1.10.13 — Rise hover tooltips (e.g. "Show transcript"): they render as a
  *            body-level <div class="portal-tooltip__tooltip"> with bare text,
  *            which BLOCK_SEL never matched. Added the class. First hover may
@@ -36,7 +42,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.10.13';
+  window.__riseTranslateVersion = '1.11.0';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -134,6 +140,10 @@
     '[data-notranslate]'
   ].join(',');
   var glossary          = { keep: [], overrides: {} };
+
+  // Tracks generated translated VTT caption tracks, keyed by sourceKey|lang.
+  var translatedVttCache = {};
+  var VTT_GENERATED_ATTR = 'data-rise-translate-vtt';
 
   /* ── STYLES ─────────────────────────────────────────────────────── */
   var css = [
@@ -1277,6 +1287,7 @@
 
     if (toTranslate.length === 0) {
       applyTranslations(blocks, lang);
+      translateVideoCaptions(lang);
       if (resetBtn) resetBtn.style.display = 'inline-block';
       return;
     }
@@ -1297,6 +1308,7 @@
       if (status)   status.textContent = 'Translated: ' + (langObj ? langObj.label : lang);
       if (resetBtn) resetBtn.style.display = 'inline-block';
       resumeObserver();
+      translateVideoCaptions(lang);
     });
   }
 
@@ -1308,6 +1320,374 @@
       if (cache[lang] && cache[lang][key]) {
         setBlockTranslatedText(el, orig, cache[lang][key]);
       }
+    });
+  }
+
+  /* ── VIDEO CAPTION (VTT) TRANSLATION ─────────────────────────────── */
+  // Finds <video> elements, reads their caption track's VTT, translates cue
+  // text using the existing glossary-aware pipeline (prepareTranslationJob /
+  // batchTranslate / assembleFromSegments via the cache), and injects a new
+  // generated <track> in the chosen language. Reset removes generated tracks
+  // and restores original caption track modes.
+
+  function getVideoElements() {
+    var videos = [];
+    var seen = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
+
+    getTranslateRoots().forEach(function (root) {
+      root.querySelectorAll('video').forEach(function (video) {
+        if (seen && seen.has(video)) return;
+        if (seen) seen.add(video);
+        videos.push(video);
+      });
+    });
+
+    return videos;
+  }
+
+  function isCaptionTrackEl(trackEl) {
+    if (!trackEl || trackEl.hasAttribute(VTT_GENERATED_ATTR)) return false;
+    var kind = (trackEl.getAttribute('kind') || trackEl.kind || '').toLowerCase();
+    return kind === 'captions' || kind === 'subtitles';
+  }
+
+  function pickSourceCaptionTrack(video) {
+    var tracks = Array.prototype.slice.call(video.querySelectorAll('track')).filter(isCaptionTrackEl);
+    if (!tracks.length) return null;
+
+    return tracks.find(function (t) { return t.track && t.track.mode === 'showing'; }) ||
+           tracks.find(function (t) { return t.default; }) ||
+           tracks.find(function (t) {
+             var lang = (t.getAttribute('srclang') || t.srclang || '').toLowerCase();
+             return lang.indexOf('en') === 0;
+           }) ||
+           tracks[0];
+  }
+
+  function getLanguageLabel(code) {
+    for (var i = 0; i < LANGUAGES.length; i++) {
+      if (LANGUAGES[i].code === code) return LANGUAGES[i].label;
+    }
+    return code;
+  }
+
+  // Read the VTT content for a caption track. Tries fetching the src URL
+  // first (preserves exact cue formatting/settings), then falls back to
+  // reading loaded cues from the TextTrack API (handles CORS failures).
+  function readVttFromTrack(trackEl, cb) {
+    var src = trackEl.src || trackEl.getAttribute('src');
+
+    if (src) {
+      fetch(src)
+        .then(function (r) {
+          if (!r.ok) throw new Error('VTT HTTP ' + r.status);
+          return r.text();
+        })
+        .then(function (text) { cb(null, text, src); })
+        .catch(function () {
+          readVttFromLoadedCues(trackEl, cb);
+        });
+      return;
+    }
+
+    readVttFromLoadedCues(trackEl, cb);
+  }
+
+  // Fall back to reading cues from the browser's loaded TextTrack.
+  // Captions may load asynchronously, so poll briefly for cues to appear.
+  function readVttFromLoadedCues(trackEl, cb) {
+    var tt = trackEl.track;
+    if (!tt) return cb(new Error('No text track'));
+
+    var originalMode = tt.mode;
+    try { tt.mode = 'hidden'; } catch (e) {}
+
+    var tries = 0;
+    function check() {
+      var cues;
+      try { cues = tt.cues; } catch (e) { cues = null; }
+
+      if (cues && cues.length) {
+        var text = serializeCuesAsVtt(cues);
+        var key = 'inline:' + (trackEl.getAttribute('label') || '') + ':' + cues.length;
+        try { tt.mode = originalMode || 'disabled'; } catch (e) {}
+        return cb(null, text, key);
+      }
+
+      if (++tries > 40) {
+        try { tt.mode = originalMode || 'disabled'; } catch (e) {}
+        return cb(new Error('Caption cues not loaded'));
+      }
+      setTimeout(check, 150);
+    }
+
+    check();
+  }
+
+  function serializeCuesAsVtt(cues) {
+    var out = ['WEBVTT', ''];
+
+    Array.prototype.forEach.call(cues, function (cue) {
+      out.push(formatVttTime(cue.startTime) + ' --> ' + formatVttTime(cue.endTime));
+      out.push(cue.text || '');
+      out.push('');
+    });
+
+    return out.join('\n');
+  }
+
+  function formatVttTime(seconds) {
+    var totalMs = Math.max(0, Math.round((Number(seconds) || 0) * 1000));
+    var h = Math.floor(totalMs / 3600000);
+    totalMs -= h * 3600000;
+    var m = Math.floor(totalMs / 60000);
+    totalMs -= m * 60000;
+    var s = Math.floor(totalMs / 1000);
+    var ms = totalMs - s * 1000;
+
+    return [
+      String(h).padStart(2, '0'),
+      String(m).padStart(2, '0'),
+      String(s).padStart(2, '0')
+    ].join(':') + '.' + String(ms).padStart(3, '0');
+  }
+
+  // Parse a WebVTT file into blocks: cues (with prefix/timing/text) and raw
+  // blocks (headers, NOTE comments, etc.). Preserves cue ordering and
+  // settings so they can be reassembled exactly after translation.
+  function parseWebVtt(text) {
+    text = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    var lines = text.split('\n');
+    var blocks = [];
+    var current = [];
+
+    function flush() {
+      if (!current.length) return;
+
+      var timingIndex = -1;
+      for (var i = 0; i < current.length; i++) {
+        if (current[i].indexOf('-->') !== -1) {
+          timingIndex = i;
+          break;
+        }
+      }
+
+      if (timingIndex === -1) {
+        blocks.push({ type: 'raw', lines: current.slice() });
+      } else {
+        blocks.push({
+          type: 'cue',
+          prefix: current.slice(0, timingIndex),
+          timing: current[timingIndex],
+          text: current.slice(timingIndex + 1).join('\n')
+        });
+      }
+
+      current = [];
+    }
+
+    lines.forEach(function (line) {
+      if (/^\s*$/.test(line)) {
+        flush();
+      } else {
+        current.push(line);
+      }
+    });
+    flush();
+
+    // Ensure WEBVTT header exists.
+    if (!blocks.length || !/^WEBVTT\b/.test((blocks[0].lines && blocks[0].lines[0]) || '')) {
+      blocks.unshift({ type: 'raw', lines: ['WEBVTT'] });
+    }
+
+    return { blocks: blocks };
+  }
+
+  function serializeWebVtt(doc) {
+    var out = [];
+
+    doc.blocks.forEach(function (block) {
+      if (block.type === 'cue') {
+        block.prefix.forEach(function (line) { out.push(line); });
+        out.push(block.timing);
+        out.push(block.text || '');
+        out.push('');
+      } else {
+        block.lines.forEach(function (line) { out.push(line); });
+        out.push('');
+      }
+    });
+
+    return out.join('\n').replace(/\n+$/, '\n');
+  }
+
+  // Translate all cue text in a VTT document using the existing glossary-aware
+  // pipeline. Only cue text is translated — timing, settings, and structure
+  // are preserved exactly. Results are cached in the shared cache[lang] map.
+  function translateVttDocument(vttText, lang, cb) {
+    var doc = parseWebVtt(vttText);
+    var cueTexts = [];
+
+    doc.blocks.forEach(function (block) {
+      if (block.type !== 'cue') return;
+      var text = block.text || '';
+      if (trimTerm(text).length >= 2) cueTexts.push(text);
+    });
+
+    cueTexts = unique(cueTexts);
+    if (!cueTexts.length) return cb(null, serializeWebVtt(doc));
+
+    if (!cache[lang]) cache[lang] = {};
+
+    var missing = cueTexts.filter(function (text) {
+      return !cache[lang][text];
+    });
+
+    function finish() {
+      doc.blocks.forEach(function (block) {
+        if (block.type !== 'cue') return;
+        if (cache[lang][block.text]) block.text = cache[lang][block.text];
+      });
+      cb(null, serializeWebVtt(doc));
+    }
+
+    if (!missing.length) return finish();
+
+    batchTranslate(missing, lang, function (err) {
+      if (err) return cb(err);
+      finish();
+    });
+  }
+
+  function rememberOriginalCaptionModes(video) {
+    Array.prototype.forEach.call(video.querySelectorAll('track'), function (trackEl) {
+      if (trackEl.hasAttribute(VTT_GENERATED_ATTR)) return;
+      if (!isCaptionTrackEl(trackEl)) return;
+      if (!trackEl.hasAttribute('data-rise-translate-original-mode')) {
+        var mode = trackEl.track ? trackEl.track.mode : '';
+        trackEl.setAttribute('data-rise-translate-original-mode', mode || '');
+      }
+    });
+  }
+
+  function removeGeneratedCaptionTracks(video) {
+    Array.prototype.forEach.call(video.querySelectorAll('track[' + VTT_GENERATED_ATTR + ']'), function (trackEl) {
+      if (trackEl.__riseTranslateBlobUrl) {
+        try { URL.revokeObjectURL(trackEl.__riseTranslateBlobUrl); } catch (e) {}
+      }
+      try { trackEl.remove(); } catch (e) {
+        if (trackEl.parentNode) trackEl.parentNode.removeChild(trackEl);
+      }
+    });
+  }
+
+  // Create a Blob URL from the translated VTT and inject it as a new <track>
+  // element. The generated track is marked with data-rise-translate-vtt so it
+  // can be found and removed on reset. Other caption tracks are disabled.
+  function injectTranslatedVttTrack(video, lang, vttText, sourceKey) {
+    if (!video || activeTranslation !== lang) return;
+
+    rememberOriginalCaptionModes(video);
+    removeGeneratedCaptionTracks(video);
+
+    var blob = new Blob([vttText], { type: 'text/vtt' });
+    var url = URL.createObjectURL(blob);
+
+    var trackEl = video.ownerDocument.createElement('track');
+    trackEl.setAttribute(VTT_GENERATED_ATTR, '1');
+    trackEl.setAttribute('kind', 'captions');
+    trackEl.setAttribute('srclang', lang);
+    trackEl.setAttribute('label', getLanguageLabel(lang));
+    trackEl.setAttribute('data-rise-translate-source', sourceKey || '');
+    trackEl.setAttribute('data-rise-translate-lang', lang);
+    trackEl.src = url;
+    trackEl.default = true;
+    trackEl.__riseTranslateBlobUrl = url;
+
+    pauseObserver();
+    video.appendChild(trackEl);
+
+    // Disable all other caption/subtitle tracks so only the translated one shows.
+    Array.prototype.forEach.call(video.textTracks || [], function (tt) {
+      if (tt.kind === 'captions' || tt.kind === 'subtitles') tt.mode = 'disabled';
+    });
+
+    // Set the new track to showing after a tick so the browser has loaded it.
+    setTimeout(function () {
+      if (activeTranslation !== lang) return;
+      try { trackEl.track.mode = 'showing'; } catch (e) {}
+    }, 0);
+
+    resumeObserver();
+  }
+
+  function restoreVideoCaptions() {
+    getVideoElements().forEach(function (video) {
+      removeGeneratedCaptionTracks(video);
+
+      Array.prototype.forEach.call(video.querySelectorAll('track'), function (trackEl) {
+        if (trackEl.hasAttribute(VTT_GENERATED_ATTR)) return;
+
+        var mode = trackEl.getAttribute('data-rise-translate-original-mode');
+        if (mode !== null && trackEl.track) {
+          try { trackEl.track.mode = mode || 'disabled'; } catch (e) {}
+          trackEl.removeAttribute('data-rise-translate-original-mode');
+        }
+      });
+    });
+  }
+
+  // Main video caption translation entry point. Called after DOM text
+  // translation in translatePage. For each video, finds its source caption
+  // track, fetches/parses the VTT, translates cue text, and injects a new
+  // translated track. Deduplicates by sourceKey|lang. Guards against stale
+  // async results (user switched language or reset before completion).
+  function translateVideoCaptions(lang) {
+    getVideoElements().forEach(function (video) {
+      var sourceTrack = pickSourceCaptionTrack(video);
+      if (!sourceTrack) return;
+
+      var sourceKey = sourceTrack.src || sourceTrack.getAttribute('src') ||
+        ('inline:' + (sourceTrack.getAttribute('label') || ''));
+
+      var translatedKey = sourceKey + '|' + lang;
+
+      // If a translated track for this video/source/lang already exists, just show it.
+      var existing = null;
+      Array.prototype.forEach.call(video.querySelectorAll('track[' + VTT_GENERATED_ATTR + ']'), function (t) {
+        if (t.getAttribute('data-rise-translate-lang') === lang &&
+            t.getAttribute('data-rise-translate-source') === sourceKey) {
+          existing = t;
+        }
+      });
+      if (existing) {
+        Array.prototype.forEach.call(video.textTracks || [], function (tt) {
+          if (tt.kind === 'captions' || tt.kind === 'subtitles') tt.mode = 'disabled';
+        });
+        try { existing.track.mode = 'showing'; } catch (e) {}
+        return;
+      }
+
+      // Remember original caption modes before any async work modifies them.
+      rememberOriginalCaptionModes(video);
+
+      // If we've already translated this VTT for this language, reuse it.
+      if (translatedVttCache[translatedKey]) {
+        injectTranslatedVttTrack(video, lang, translatedVttCache[translatedKey], sourceKey);
+        return;
+      }
+
+      readVttFromTrack(sourceTrack, function (err, vttText) {
+        if (err || !vttText || activeTranslation !== lang) return;
+
+        translateVttDocument(vttText, lang, function (err2, translatedVtt) {
+          if (err2 || !translatedVtt || activeTranslation !== lang) return;
+
+          translatedVttCache[translatedKey] = translatedVtt;
+          injectTranslatedVttTrack(video, lang, translatedVtt, sourceKey);
+        });
+      });
     });
   }
 
@@ -1423,6 +1803,7 @@
 
   /* ── RESTORE ─────────────────────────────────────────────────────── */
   function restorePage() {
+    restoreVideoCaptions();
     originalMap.forEach(function (orig, el) {
       var snap = originalNodes && originalNodes.get(el);
       if (snap && snap.length) {
