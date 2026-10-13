@@ -25,6 +25,9 @@
     var f = {
       url: String(w.location.href).slice(0, 140),
       scriptVer: w.__riseTranslateVersion || null,
+      scripts: Array.prototype.map.call(d.querySelectorAll('script[src*="risecoursetranslate"]'), function (x) { return x.src; }),
+      bars: d.querySelectorAll('#rise-translate-bar').length,
+      savedLang: (function () { try { return w.sessionStorage.getItem('rise_course_lang'); } catch (e) { return null; } })(),
       storyline: !!(w.DS || w.globalProvideData || d.querySelector('#slide, .slide-container, [class*="slide-layer"]')),
       videos: [], iframes: [], captionClassEls: [], wordEls: []
     };
@@ -33,8 +36,13 @@
       for (var i = 0; i < (v.textTracks || []).length; i++) {
         var tt = v.textTracks[i], c = null;
         try { c = tt.cues; } catch (e) {}
+        var a = null;
+        try { a = tt.activeCues; } catch (e) {}
         t.push({ kind: tt.kind, mode: tt.mode, label: tt.label, cues: c ? c.length : null,
-                 first: c && c[0] ? String(c[0].text).slice(0, 80) : null });
+                 first: c && c[0] ? String(c[0].text).slice(0, 80) : null,
+                 active: a && a[0] ? String(a[0].text).slice(0, 80) : null,
+                 rtHooked: !!tt.__rtHooked, rtLang: tt.__rtLang || null, rtBusy: tt.__rtBusy || null,
+                 firstOrig: c && c[0] && c[0].__rtOrig !== undefined ? String(c[0].__rtOrig).slice(0, 80) : null });
       }
       f.videos.push({ src: String(v.currentSrc || v.src).slice(-70), trackEls: v.querySelectorAll('track').length, tracks: t, path: path(v) });
     });
