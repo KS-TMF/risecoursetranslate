@@ -3,6 +3,9 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.1 — captions: switching language redraws the caption already on
+ *           screen (it used to wait for the next cue, which can be many
+ *           seconds); keep spaces next to glossary terms ("el Digital Twin").
  * v1.12.0 — video captions (WebVTT) follow the chosen language, live.
  *           Two paths, so it works whichever way the player draws captions:
  *           (1) cue text on every captions/subtitles TextTrack is translated
@@ -44,7 +47,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.0';
+  window.__riseTranslateVersion = '1.12.1';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -1096,7 +1099,11 @@
     return segments.map(function (seg) {
       if (seg.type === 'term') return seg.value;
       if (trimTerm(seg.value).length < 2) return seg.value;
-      return translatedParts[ti++] || seg.value;
+      var tr = translatedParts[ti++];
+      if (!tr) return seg.value;
+      // Google trims each piece; keep the original spacing next to glossary
+      // terms so "about the Digital Twin" doesn't become "sobre elDigital Twin".
+      return seg.value.match(/^\s*/)[0] + trimTerm(tr) + seg.value.match(/\s*$/)[0];
     }).join('');
   }
 
@@ -1410,6 +1417,29 @@
       });
       tt.__rtLang = lang;
       if (capTracks.indexOf(tt) === -1) capTracks.push(tt);
+      refreshActiveCues(tt);
+      scanCaptionEls(lang);
+    });
+  }
+
+  // A caption already on screen keeps its old text until the next cue
+  // starts, which can be many seconds. Removing and re-adding the active
+  // cues makes the browser (and players listening to cuechange) redraw now.
+  function refreshActiveCues(tt) {
+    var active = null;
+    try { active = tt.activeCues; } catch (e) {}
+    if (!active || !active.length) return;
+    Array.prototype.slice.call(active).forEach(function (c) {
+      try { tt.removeCue(c); tt.addCue(c); } catch (e) {}
+    });
+  }
+
+  function scanCaptionEls(lang) {
+    getTranslateRoots().forEach(function (root) {
+      root.querySelectorAll(CAPTION_EL_SEL).forEach(function (el) {
+        var cap = captionElFor(el);
+        if (cap) translateCaptionEl(cap, lang);
+      });
     });
   }
 
@@ -1458,11 +1488,8 @@
           translateTrack(tts[i], lang);
         }
       });
-      root.querySelectorAll(CAPTION_EL_SEL).forEach(function (el) {
-        var cap = captionElFor(el);
-        if (cap) translateCaptionEl(cap, lang);
-      });
     });
+    scanCaptionEls(lang);
   }
 
   // The caption line element for a node, or null if the node is not a
@@ -1529,7 +1556,7 @@
       try { delete c.__rtOrig; } catch (e) { c.__rtOrig = undefined; }
     });
     capCues = [];
-    capTracks.forEach(function (tt) { tt.__rtLang = null; tt.__rtBusy = null; });
+    capTracks.forEach(function (tt) { tt.__rtLang = null; tt.__rtBusy = null; refreshActiveCues(tt); });
     capTracks = [];
     capEls.forEach(function (r) {
       if (!r.el.isConnected) return;
