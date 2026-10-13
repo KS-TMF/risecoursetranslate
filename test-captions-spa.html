@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rise Course Translate — Caption Test (lesson loads later)</title>
+  <style>video { width: 480px; display: block; }</style>
+  <script type="text/plain" id="rise-glossary" data-rise-glossary>
+Source content,Target content,Notes (250 character max)
+Digital Twin,Digital Twin,
+  </script>
+  <script src="risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+</head>
+<body>
+  <div id="app">
+    <div class="cover"><h1>Course title</h1><a href="#/lessons/1" class="cover__header-content-action-link" id="start">Start course</a></div>
+  </div>
+<script>
+  // Like Rise: the lesson (and its video) is only added when the learner opens it.
+  document.getElementById('start').addEventListener('click', function (e) {
+    e.preventDefault();
+    location.hash = '#/lessons/1';
+    var app = document.getElementById('app');
+    app.innerHTML = '';
+    setTimeout(function () {
+      var lesson = document.createElement('section');
+      lesson.className = 'blocks-lesson';
+      lesson.innerHTML = '<h2>Lesson one</h2><p>This lesson has a video.</p>' +
+        '<figure class="block-video__item"><div class="ov-player"><video class="ov-video" controls muted playsinline src="test-captions.mp4">' +
+        '<track kind="captions" srclang="en" label="English" src="test-captions.vtt" default></video></div></figure>';
+      app.appendChild(lesson);
+    }, 300);
+  });
+</script>
+</body>
+</html>
