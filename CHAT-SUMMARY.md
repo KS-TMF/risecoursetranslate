@@ -37,6 +37,7 @@ Paste in **`scormcontent/index.html`**.
 | 7 | User wants **CSV only**, not `.js` | xAPI blocks CSV fetch even when file is in folder | v1.8.9 — **Update Glossary embeds CSV inside `index.html`**; course reads `embedded-csv` |
 | 8 | Dropdown search broke when the panel was portaled to `<body>` (to escape Rise's overflow clipping) | Search filtered options in the wrong DOM location once portaled | v1.9.1 — fixed language search to work against the portaled panel |
 | 9 | Custom HTML/JavaScript code blocks were invisible to the translator — only Rise's own text and video captions were covered | Code blocks render in a sandboxed `<iframe>` with arbitrary markup the bar can't safely walk | v1.10.0 — **code blocks now translate.** Prototyped separately (`Rise_Translate_Test_v1.0` repo), then merged into main. See `CODE-BLOCKS.md` for the full mechanism. |
+| 10 | Video captions (WebVTT) stayed in English | The v1.11.x attempt was reverted to be safe | v1.12.0 (on the `test` branch first) — cue text is translated in place on caption tracks, and caption lines a player draws into the page are swapped as they appear. Track on/off modes are never changed. Test page: `test-captions.html`. |
 
 ---
 
