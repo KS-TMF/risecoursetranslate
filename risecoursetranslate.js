@@ -3,6 +3,9 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.2 — captions drawn by the browser are shown at 70% size (they scale
+ *           with the video and got very large on wide screens). Override per
+ *           course with data-caption-size="85%" on the script tag; "100%" = off.
  * v1.12.1 — captions: switching language redraws the caption already on
  *           screen (it used to wait for the next cue, which can be many
  *           seconds); keep spaces next to glossary terms ("el Digital Twin").
@@ -47,7 +50,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.1';
+  window.__riseTranslateVersion = '1.12.2';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -297,8 +300,21 @@
     if (document.getElementById('rise-translate-styles')) return;
     var s = document.createElement('style');
     s.id = 'rise-translate-styles';
-    s.textContent = css;
+    s.textContent = css + captionSizeCss();
     document.head.appendChild(s);
+  }
+
+  // Browser-drawn captions scale with the video, so on a wide screen they get
+  // huge. Shrink them to 70% by default; a course can choose its own size with
+  // data-caption-size="85%" on the script tag, or "100%" to leave it alone.
+  function captionSizeCss() {
+    var size = (scriptElRef && scriptElRef.getAttribute('data-caption-size')) || '70%';
+    if (!/^\d{1,3}(?:\.\d+)?%$/.test(size) || size === '100%') return '';
+    // Chrome/Edge/Safari set the caption font size inline on the track
+    // container, so scale the inner display box (needs !important); ::cue
+    // covers browsers that honour it (Firefox).
+    return '\nvideo::-webkit-media-text-track-display{font-size:' + size + ' !important;}' +
+           '\nvideo::cue{font-size:' + size + ';}\n';
   }
 
   /* ── BAR ────────────────────────────────────────────────────────── */
