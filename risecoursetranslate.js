@@ -458,7 +458,7 @@
     /* short note under the selector (shown on the course cover only) */
     var hint = document.createElement('p');
     hint.className = 'rt-hint';
-    hint.textContent = 'English is the default language. You can continue without selecting a language, and use Reset at any time to return to English.';
+    hint.textContent = 'English is the default language. You can continue without selecting a language, and use the Reset button at any time to return to English.';
 
     bar.appendChild(wrap);
     bar.appendChild(spinner);
