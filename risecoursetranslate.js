@@ -3,6 +3,8 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.5 — captions back to the browser's default size (the 70% shrink from
+ *           v1.12.2 is now opt-in only via data-caption-size).
  * v1.12.4 — English (default) is shown and selected in the dropdown from the
  *           start, with a short note under the selector on the cover:
  *           English is the default, continuing without choosing is fine,
@@ -56,7 +58,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.4';
+  window.__riseTranslateVersion = '1.12.5';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -318,11 +320,10 @@
     document.head.appendChild(s);
   }
 
-  // Browser-drawn captions scale with the video, so on a wide screen they get
-  // huge. Shrink them to 70% by default; a course can choose its own size with
-  // data-caption-size="85%" on the script tag, or "100%" to leave it alone.
+  // Captions keep the browser's default size. A course can opt in to a
+  // different size with data-caption-size="85%" on the script tag.
   function captionSizeCss() {
-    var size = (scriptElRef && scriptElRef.getAttribute('data-caption-size')) || '70%';
+    var size = (scriptElRef && scriptElRef.getAttribute('data-caption-size')) || '100%';
     if (!/^\d{1,3}(?:\.\d+)?%$/.test(size) || size === '100%') return '';
     // Chrome/Edge/Safari set the caption font size inline on the track
     // container, so scale the inner display box (needs !important); ::cue
