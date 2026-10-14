@@ -3,6 +3,8 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.8 — glossary: all-capitals terms (IT, ODF, UML) only match in
+ *           capitals, so the word "It" no longer counts as the term "IT".
  * v1.12.7 — the note under the language selector switches to the chosen
  *           language ("Reset" stays in English to match the button).
  * v1.12.6 — the video's CC menu names the caption track after the chosen
@@ -63,7 +65,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.7';
+  window.__riseTranslateVersion = '1.12.8';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -1135,6 +1137,10 @@
     return prefix + escaped + suffix;
   }
 
+  function isAcronym(term) {
+    return /^[A-Z0-9][A-Z0-9&.\-]*s?$/.test(term) && /[A-Z].*[A-Z]|^[A-Z]{2}/.test(term);
+  }
+
   function findGlossaryMatches(text, keepList) {
     var all = [];
     var i, term, re, m;
@@ -1142,7 +1148,9 @@
     for (i = 0; i < keepList.length; i++) {
       term = keepList[i];
       if (!term) continue;
-      re = new RegExp(buildTermPattern(term), 'gi');
+      // Acronyms (IT, ODF, UML, CSPs) only match in capitals, so the word
+      // "It" at the start of a sentence isn't mistaken for the term "IT".
+      re = new RegExp(buildTermPattern(term), isAcronym(term) ? 'g' : 'gi');
       while ((m = re.exec(text)) !== null) {
         all.push({ start: m.index, end: m.index + m[0].length });
         if (m[0].length === 0) re.lastIndex++;
