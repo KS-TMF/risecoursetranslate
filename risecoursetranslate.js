@@ -3,6 +3,10 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.4 — English (default) is shown and selected in the dropdown from the
+ *           start, with a short note under the selector on the cover:
+ *           English is the default, continuing without choosing is fine,
+ *           and Reset returns to English.
  * v1.12.3 — "English (original)" at the top of the language list; picking
  *           it does the same as Reset.
  * v1.12.2 — captions drawn by the browser are shown at 70% size (they scale
@@ -52,14 +56,14 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.3';
+  window.__riseTranslateVersion = '1.12.4';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
   var LANGUAGES = [
-    // Picking this one is the same as Reset: it puts the course back to its
-    // original English text and captions (nothing is translated).
-    { code: 'en', label: 'English (original)' },
+    // The course's own language and the default. Picking it is the same as
+    // Reset: original English text and captions, nothing translated.
+    { code: 'en', label: 'English (default)' },
     { code: 'af', label: 'Afrikaans' },
     { code: 'ar', label: 'Arabic', rtl: true },
     { code: 'zh', label: 'Chinese (Simplified)' },
@@ -234,6 +238,11 @@
     '#' + BAR_ID + '.rise-translate-bar--cover .rt-reset:hover{',
     '  background:rgba(255,255,255,.12);border-color:#fff;color:#fff;',
     '}',
+    '#' + BAR_ID + ' .rt-hint{display:none;margin:0;padding:6px 10px;border-radius:6px;font-size:12px;line-height:1.45;text-align:center;color:#fff;background:rgba(0,0,0,.55);}',
+    // The bar sits in a flex row beside Rise's round START button; without
+    // this the taller bar stretches that button into an oval.
+    '.cover__header-content-action-wrapper:has(> #' + BAR_ID + '){align-items:flex-start;}',
+    '#' + BAR_ID + '.rise-translate-bar--cover .rt-hint{display:block;}',
     '#' + BAR_ID + ' .rt-spinner{',
     '  width:14px;height:14px;border:2px solid rgba(127,127,127,.3);',
     '  border-top-color:currentColor;border-radius:50%;flex-shrink:0;',
@@ -339,7 +348,7 @@
     var trigger = document.createElement('button');
     trigger.className = 'rt-trigger';
     trigger.type = 'button';
-    trigger.innerHTML = '<span class="rt-trigger-text">Select language</span><span class="rt-caret">▼</span>';
+    trigger.innerHTML = '<span class="rt-trigger-text">' + LANGUAGES[0].label + '</span><span class="rt-caret">▼</span>';
 
     /* panel */
     var panel = document.createElement('div');
@@ -361,6 +370,7 @@
       opt.className = 'rt-option';
       opt.textContent = lang.label;
       opt.setAttribute('data-code', lang.code);
+      if (lang.code === 'en') opt.classList.add('rt-selected');
       opt.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -445,9 +455,15 @@
       resetToOriginal(list);
     });
 
+    /* short note under the selector (shown on the course cover only) */
+    var hint = document.createElement('p');
+    hint.className = 'rt-hint';
+    hint.textContent = 'English is the default language. You can continue without selecting a language, and use Reset at any time to return to English.';
+
     bar.appendChild(wrap);
     bar.appendChild(spinner);
     bar.appendChild(resetBtn);
+    bar.appendChild(hint);
 
     bar._trigger = trigger;
     bar._panel   = panel;
@@ -686,7 +702,7 @@
     if (!bar) return;
     var txt = bar.querySelector('.rt-trigger-text');
     if (!txt) return;
-    if (!code) { txt.textContent = 'Select language'; return; }
+    if (!code) { txt.textContent = LANGUAGES[0].label; return; }
     var lang = LANGUAGES.find(function (l) { return l.code === code; });
     txt.textContent = lang ? lang.label : code;
   }
@@ -698,7 +714,9 @@
     activeTranslation = null;
     setTriggerLabel(null);
     if (bar && bar._reset) bar._reset.style.display = 'none';
-    list.querySelectorAll('.rt-option').forEach(function (o) { o.classList.remove('rt-selected'); });
+    list.querySelectorAll('.rt-option').forEach(function (o) {
+      o.classList.toggle('rt-selected', o.getAttribute('data-code') === 'en');
+    });
     broadcastLangToBlocks('en');
   }
 
