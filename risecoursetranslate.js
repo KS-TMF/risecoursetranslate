@@ -3,6 +3,9 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.6 — the video's CC menu names the caption track after the chosen
+ *           language (e.g. "French" instead of the uploaded "English");
+ *           Reset restores the original name.
  * v1.12.5 — captions back to the browser's default size (the 70% shrink from
  *           v1.12.2 is now opt-in only via data-caption-size).
  * v1.12.4 — English (default) is shown and selected in the dropdown from the
@@ -58,7 +61,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.5';
+  window.__riseTranslateVersion = '1.12.6';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -1540,6 +1543,7 @@
       });
     });
     scanCaptionEls(lang);
+    relabelCaptionTracks(lang);
   }
 
   // The caption line element for a node, or null if the node is not a
@@ -1583,7 +1587,10 @@
       var lang = activeTranslation;
       if (!lang) return;
       var found = [];
+      var inPlayer = false;
       function add(node) {
+        var el = node && (node.nodeType === 3 ? node.parentElement : node);
+        if (!inPlayer && el && el.closest && el.closest(MEDIA_SEL)) inPlayer = true;
         var cap = captionElFor(node);
         if (cap && found.indexOf(cap) === -1) found.push(cap);
       }
@@ -1596,11 +1603,70 @@
         });
       });
       found.forEach(function (el) { translateCaptionEl(el, lang); });
+      // The player may (re)draw its CC menu at any time; keep it renamed.
+      if (inPlayer) relabelCaptionMenus(root, langLabel(lang));
     });
     root.__rtCapObs.observe(root, { childList: true, subtree: true, characterData: true });
   }
 
+  /* Caption menu label: the only uploaded track is usually named "English",
+     so after switching to French the player's CC menu still offered
+     "English". Rename the track (and the menu text the player already drew)
+     to the active language; Reset puts the original name back. */
+  var capLabelNodes = [];   // [{node, orig}] menu text nodes we renamed
+  var capLabelOrig  = {};   // original track labels -> true
+
+  function langLabel(code) {
+    for (var i = 0; i < LANGUAGES.length; i++) if (LANGUAGES[i].code === code) return LANGUAGES[i].label.replace(/\s*\(default\)$/, '');
+    return code;
+  }
+
+  function relabelCaptionTracks(lang) {
+    var label = lang ? langLabel(lang) : null;
+    getTranslateRoots().forEach(function (root) {
+      root.querySelectorAll('video track').forEach(function (t) {
+        var kind = (t.getAttribute('kind') || '').toLowerCase();
+        if (kind !== 'captions' && kind !== 'subtitles') return;
+        if (!t.hasAttribute('data-rt-orig-label')) {
+          if (!label) return;
+          t.setAttribute('data-rt-orig-label', t.getAttribute('label') || '');
+        }
+        var orig = t.getAttribute('data-rt-orig-label');
+        if (orig) capLabelOrig[orig] = true;
+        var want = label || orig;
+        if (t.getAttribute('label') !== want) t.setAttribute('label', want);
+        if (!label) t.removeAttribute('data-rt-orig-label');
+      });
+      relabelCaptionMenus(root, label);
+    });
+  }
+
+  // Rename menu entries the player drew from the track label. Only exact
+  // matches of an original track label inside a media player menu are touched.
+  function relabelCaptionMenus(root, label) {
+    capLabelNodes = capLabelNodes.filter(function (r) { return r.node.isConnected; });
+    capLabelNodes.forEach(function (r) {
+      var want = label || r.orig;
+      if (r.node.nodeValue !== want) r.node.nodeValue = want;
+    });
+    if (!label || !Object.keys(capLabelOrig).length) return;
+    root.querySelectorAll(MEDIA_SEL).forEach(function (player) {
+      var tw = player.ownerDocument.createTreeWalker(player, NodeFilter.SHOW_TEXT, null), n;
+      while ((n = tw.nextNode())) {
+        var txt = trimTerm(n.nodeValue);
+        if (!capLabelOrig[txt]) continue;
+        var el = n.parentElement;
+        if (!el || !el.closest('[role^="menuitem"],[role="option"],[class*="menu"],[class*="Menu"],li')) continue;
+        if (capLabelNodes.some(function (r) { return r.node === n; })) continue;
+        capLabelNodes.push({ node: n, orig: n.nodeValue });
+        n.nodeValue = label;
+      }
+    });
+  }
+
   function restoreCaptions() {
+    relabelCaptionTracks(null);
+    capLabelNodes = [];
     capCues.forEach(function (c) {
       try { c.text = c.__rtOrig; } catch (e) {}
       try { delete c.__rtOrig; } catch (e) { c.__rtOrig = undefined; }
