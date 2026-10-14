@@ -58,6 +58,8 @@ All work is on the `test` branch (currently **v1.12.8**). Test courses use the l
 
 Confirmed working in LearnUpon with the loader line: captions translate and switch instantly, CC menu shows the chosen language, English (default) + translated cover note. Glossary works once the CSV is inside `scormcontent/`.
 
+Release prep (2026-10-14): branch `release-1.12.8` = current `main` + this tested `risecoursetranslate.js` (byte-identical to `test`; test-only files left out). Tags: `v1.12.8` (release) and `v1.10.13` (rollback point). Old-vs-new regression check passed (mock course, code blocks, real LearnUpon course, phone size). Not live yet — waiting for a go-live time; then push `release-1.12.8` to `main`, purge jsDelivr `@main`, verify repeatedly, check a live course; rollback = restore `v1.10.13`.
+
 Still open:
 - A glossary term split across two caption lines ("…the Information" / "Framework is…") isn't recognised.
 - Plurals aren't covered by singular glossary terms ("frameworks" vs "Framework") — add plural rows.
