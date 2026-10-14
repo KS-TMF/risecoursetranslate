@@ -3,6 +3,35 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.8 — glossary: all-capitals terms (IT, ODF, UML) only match in
+ *           capitals, so the word "It" no longer counts as the term "IT".
+ * v1.12.7 — the note under the language selector switches to the chosen
+ *           language ("Reset" stays in English to match the button).
+ * v1.12.6 — the video's CC menu names the caption track after the chosen
+ *           language (e.g. "French" instead of the uploaded "English");
+ *           Reset restores the original name.
+ * v1.12.5 — captions back to the browser's default size (the 70% shrink from
+ *           v1.12.2 is now opt-in only via data-caption-size).
+ * v1.12.4 — English (default) is shown and selected in the dropdown from the
+ *           start, with a short note under the selector on the cover:
+ *           English is the default, continuing without choosing is fine,
+ *           and Reset returns to English.
+ * v1.12.3 — "English (original)" at the top of the language list; picking
+ *           it does the same as Reset.
+ * v1.12.2 — captions drawn by the browser are shown at 70% size (they scale
+ *           with the video and got very large on wide screens). Override per
+ *           course with data-caption-size="85%" on the script tag; "100%" = off.
+ * v1.12.1 — captions: switching language redraws the caption already on
+ *           screen (it used to wait for the next cue, which can be many
+ *           seconds); keep spaces next to glossary terms ("el Digital Twin").
+ * v1.12.0 — video captions (WebVTT) follow the chosen language, live.
+ *           Two paths, so it works whichever way the player draws captions:
+ *           (1) cue text on every captions/subtitles TextTrack is translated
+ *           in place (covers native captions and players that read cues);
+ *           (2) caption overlay text drawn into the page by the player is
+ *           swapped as each line appears. VTT tags (<v Name>, <i>) are kept,
+ *           glossary terms stay untranslated, track modes are never changed,
+ *           and Reset puts the original captions back.
  * v1.10.13 — Rise hover tooltips (e.g. "Show transcript"): they render as a
  *            body-level <div class="portal-tooltip__tooltip"> with bare text,
  *            which BLOCK_SEL never matched. Added the class. First hover may
@@ -36,11 +65,14 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.10.13';
+  window.__riseTranslateVersion = '1.12.8';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
   var LANGUAGES = [
+    // The course's own language and the default. Picking it is the same as
+    // Reset: original English text and captions, nothing translated.
+    { code: 'en', label: 'English (default)' },
     { code: 'af', label: 'Afrikaans' },
     { code: 'ar', label: 'Arabic', rtl: true },
     { code: 'zh', label: 'Chinese (Simplified)' },
@@ -215,6 +247,11 @@
     '#' + BAR_ID + '.rise-translate-bar--cover .rt-reset:hover{',
     '  background:rgba(255,255,255,.12);border-color:#fff;color:#fff;',
     '}',
+    '#' + BAR_ID + ' .rt-hint{display:none;margin:0;padding:6px 10px;border-radius:6px;font-size:12px;line-height:1.45;text-align:center;color:#fff;background:rgba(0,0,0,.55);}',
+    // The bar sits in a flex row beside Rise's round START button; without
+    // this the taller bar stretches that button into an oval.
+    '.cover__header-content-action-wrapper:has(> #' + BAR_ID + '){align-items:flex-start;}',
+    '#' + BAR_ID + '.rise-translate-bar--cover .rt-hint{display:block;}',
     '#' + BAR_ID + ' .rt-spinner{',
     '  width:14px;height:14px;border:2px solid rgba(127,127,127,.3);',
     '  border-top-color:currentColor;border-radius:50%;flex-shrink:0;',
@@ -286,8 +323,49 @@
     if (document.getElementById('rise-translate-styles')) return;
     var s = document.createElement('style');
     s.id = 'rise-translate-styles';
-    s.textContent = css;
+    s.textContent = css + captionSizeCss();
     document.head.appendChild(s);
+  }
+
+  // Captions keep the browser's default size. A course can opt in to a
+  // different size with data-caption-size="85%" on the script tag.
+  function captionSizeCss() {
+    var size = (scriptElRef && scriptElRef.getAttribute('data-caption-size')) || '100%';
+    if (!/^\d{1,3}(?:\.\d+)?%$/.test(size) || size === '100%') return '';
+    // Chrome/Edge/Safari set the caption font size inline on the track
+    // container, so scale the inner display box (needs !important); ::cue
+    // covers browsers that honour it (Firefox).
+    return '\nvideo::-webkit-media-text-track-display{font-size:' + size + ' !important;}' +
+           '\nvideo::cue{font-size:' + size + ';}\n';
+  }
+
+  /* ── COVER NOTE ─────────────────────────────────────────────────── */
+  // The note under the selector follows the chosen language. "Reset" is kept
+  // in English inside it so it matches the Reset button's label.
+  var HINT_EN = 'English is the default language. You can continue without selecting a language, and use the Reset button at any time to return to English.';
+  var hintCache = {};
+
+  function setHint(text) {
+    var bar = barRef || document.getElementById(BAR_ID);
+    var el = bar && bar.querySelector('.rt-hint');
+    if (el && el.textContent !== text) el.textContent = text;
+  }
+
+  function translateHint(lang) {
+    if (!lang || lang === 'en') return setHint(HINT_EN);
+    if (hintCache[lang]) return setHint(hintCache[lang]);
+    // Translate the whole note in one go (splitting it around "Reset" broke
+    // the grammar). Quoting "Reset" makes Google keep it as a label, then the
+    // quoted word is put back to "Reset" so it matches the button.
+    googleTranslate([HINT_EN.replace('the Reset button', 'the "Reset" button')], lang, function (err, results) {
+      if (err || !results || !results[0]) return;
+      var out = results[0].replace(/([\u0022\u201C\u201E\u00AB\u300C\u300E\u2018])\s*[^\u0022\u201C\u201D\u201E\u00AB\u00BB\u300C\u300D\u300E\u300F\u2018\u2019]{1,40}?\s*([\u0022\u201D\u201C\u00BB\u300D\u300F\u2019])/, function (m, open, close) {
+        var pad = open === '\u00AB' ? '\u00A0' : '';
+        return open + pad + 'Reset' + pad + close;
+      });
+      hintCache[lang] = out;
+      if (activeTranslation === lang) setHint(out);
+    });
   }
 
   /* ── BAR ────────────────────────────────────────────────────────── */
@@ -307,7 +385,7 @@
     var trigger = document.createElement('button');
     trigger.className = 'rt-trigger';
     trigger.type = 'button';
-    trigger.innerHTML = '<span class="rt-trigger-text">Select language</span><span class="rt-caret">▼</span>';
+    trigger.innerHTML = '<span class="rt-trigger-text">' + LANGUAGES[0].label + '</span><span class="rt-caret">▼</span>';
 
     /* panel */
     var panel = document.createElement('div');
@@ -329,6 +407,7 @@
       opt.className = 'rt-option';
       opt.textContent = lang.label;
       opt.setAttribute('data-code', lang.code);
+      if (lang.code === 'en') opt.classList.add('rt-selected');
       opt.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -410,18 +489,18 @@
     resetBtn.style.display = 'none';
     resetBtn.addEventListener('mousedown', function (e) {
       e.preventDefault();
-      restorePage();
-      clearSavedLang();
-      activeTranslation = null;
-      setTriggerLabel(null);
-      resetBtn.style.display = 'none';
-      list.querySelectorAll('.rt-option').forEach(function (o) { o.classList.remove('rt-selected'); });
-      broadcastLangToBlocks('en');
+      resetToOriginal(list);
     });
+
+    /* short note under the selector (shown on the course cover only) */
+    var hint = document.createElement('p');
+    hint.className = 'rt-hint';
+    hint.textContent = HINT_EN;
 
     bar.appendChild(wrap);
     bar.appendChild(spinner);
     bar.appendChild(resetBtn);
+    bar.appendChild(hint);
 
     bar._trigger = trigger;
     bar._panel   = panel;
@@ -660,14 +739,33 @@
     if (!bar) return;
     var txt = bar.querySelector('.rt-trigger-text');
     if (!txt) return;
-    if (!code) { txt.textContent = 'Select language'; return; }
+    if (!code) { txt.textContent = LANGUAGES[0].label; return; }
     var lang = LANGUAGES.find(function (l) { return l.code === code; });
     txt.textContent = lang ? lang.label : code;
+  }
+
+  function resetToOriginal(list) {
+    var bar = barRef || document.getElementById(BAR_ID);
+    restorePage();
+    clearSavedLang();
+    activeTranslation = null;
+    setHint(HINT_EN);
+    setTriggerLabel(null);
+    if (bar && bar._reset) bar._reset.style.display = 'none';
+    list.querySelectorAll('.rt-option').forEach(function (o) {
+      o.classList.toggle('rt-selected', o.getAttribute('data-code') === 'en');
+    });
+    broadcastLangToBlocks('en');
   }
 
   function selectLanguage(code, list) {
     var bar = barRef || document.getElementById(BAR_ID);
     if (!bar) return;
+    if (code === 'en') {
+      if (bar._trigger && bar._panel) closePanel(bar._trigger, bar._panel);
+      resetToOriginal(list);
+      return;
+    }
     setTriggerLabel(code);
     saveLang(code);
     activeTranslation = code;
@@ -1039,6 +1137,10 @@
     return prefix + escaped + suffix;
   }
 
+  function isAcronym(term) {
+    return /^[A-Z0-9][A-Z0-9&.\-]*s?$/.test(term) && /[A-Z].*[A-Z]|^[A-Z]{2}/.test(term);
+  }
+
   function findGlossaryMatches(text, keepList) {
     var all = [];
     var i, term, re, m;
@@ -1046,7 +1148,9 @@
     for (i = 0; i < keepList.length; i++) {
       term = keepList[i];
       if (!term) continue;
-      re = new RegExp(buildTermPattern(term), 'gi');
+      // Acronyms (IT, ODF, UML, CSPs) only match in capitals, so the word
+      // "It" at the start of a sentence isn't mistaken for the term "IT".
+      re = new RegExp(buildTermPattern(term), isAcronym(term) ? 'g' : 'gi');
       while ((m = re.exec(text)) !== null) {
         all.push({ start: m.index, end: m.index + m[0].length });
         if (m[0].length === 0) re.lastIndex++;
@@ -1088,7 +1192,11 @@
     return segments.map(function (seg) {
       if (seg.type === 'term') return seg.value;
       if (trimTerm(seg.value).length < 2) return seg.value;
-      return translatedParts[ti++] || seg.value;
+      var tr = translatedParts[ti++];
+      if (!tr) return seg.value;
+      // Google trims each piece; keep the original spacing next to glossary
+      // terms so "about the Digital Twin" doesn't become "sobre elDigital Twin".
+      return seg.value.match(/^\s*/)[0] + trimTerm(tr) + seg.value.match(/\s*$/)[0];
     }).join('');
   }
 
@@ -1272,8 +1380,11 @@
     });
     toTranslate = unique(toTranslate);
 
+    translateHint(lang);
     var langObj = LANGUAGES.find(function (l) { return l.code === lang; });
     document.body.style.direction = (langObj && langObj.rtl) ? 'rtl' : '';
+
+    translateCaptions(lang);
 
     if (toTranslate.length === 0) {
       applyTranslations(blocks, lang);
@@ -1309,6 +1420,307 @@
         setBlockTranslatedText(el, orig, cache[lang][key]);
       }
     });
+  }
+
+  /* ── VIDEO CAPTIONS (WebVTT) ─────────────────────────────────────── */
+  /* Captions reach the screen one of two ways, so both are handled:
+     1. TextTrack cues (native <track> captions, or a player that reads
+        cues on cuechange): each cue's text is translated in place.
+     2. A player that parses the VTT itself and draws caption lines into
+        the page: those lines are swapped as they appear.
+     Track modes are never touched, so the course's caption on/off
+     setting is left exactly as the learner chose it. */
+  var CAPTION_EL_SEL  = '[class*="caption"],[class*="Caption"],[class*="subtitle"],[class*="Subtitle"],[class*="text-track"]';
+  var CAPTION_NOT_SEL = 'button,select,option,input,[role="button"],[role="menu"],[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="listbox"],[role="option"],[class*="menu"],[class*="Menu"],[class*="button"],[class*="Button"],[class*="toggle"],[class*="Toggle"],[class*="setting"],[class*="Setting"],[class*="control"],[class*="Control"]';
+  var MEDIA_SEL       = 'video,audio,[class*="player"],[class*="Player"],[class*="video"],[class*="Video"],[class*="vjs-"],[class*="plyr"],[class*="mejs"],[class*="media"],[class*="Media"]';
+  var capOrig    = {};   // caption text we wrote (tags stripped) -> original text
+  var capCues    = [];   // cues changed in place, for Reset
+  var capTracks  = [];   // tracks marked with __rtLang, for Reset
+  var capEls     = [];   // caption overlay elements changed, for Reset
+  var capPending = {};   // lang|text while an overlay line is being fetched
+  var capHooked  = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
+
+  function normCap(t) { return trimTerm(String(t || '').replace(/\s*\n\s*/g, ' ')); }
+  function stripCapTags(t) { return String(t || '').replace(/<[^>]*>/g, ''); }
+
+  // Translate caption strings. WebVTT tags (<v Name>, <i>, <c.x>, timestamps)
+  // are kept verbatim; only the text between tags goes through the normal
+  // glossary-aware pipeline and shared cache. cb(err, map[orig] = translated)
+  function translateCaptionTexts(texts, lang, cb) {
+    cache[lang] = cache[lang] || {};
+    var parsed = {};
+    var missing = [];
+    texts.forEach(function (t) {
+      if (parsed[t]) return;
+      parsed[t] = normCap(t).split(/(<[^>]*>)/);
+      parsed[t].forEach(function (p, i) {
+        if (i % 2 === 1) return;
+        var core = trimTerm(p);
+        if (core.length >= 2 && !cache[lang][core] && missing.indexOf(core) === -1) missing.push(core);
+      });
+    });
+
+    function build() {
+      var out = {};
+      Object.keys(parsed).forEach(function (t) {
+        var tr = parsed[t].map(function (p, i) {
+          if (i % 2 === 1) return p;
+          var core = trimTerm(p);
+          var hit = core.length >= 2 ? cache[lang][core] : null;
+          if (!hit) return p;
+          return p.match(/^\s*/)[0] + hit + p.match(/\s*$/)[0];
+        }).join('');
+        out[t] = tr;
+        capOrig[normCap(stripCapTags(tr))] = normCap(stripCapTags(t));
+      });
+      cb(null, out);
+    }
+
+    if (!missing.length) return build();
+    batchTranslate(missing, lang, function (err) {
+      if (err) return cb(err);
+      build();
+    });
+  }
+
+  function isCaptionTrack(tt) {
+    return tt && (tt.kind === 'captions' || tt.kind === 'subtitles');
+  }
+
+  // Translate every loaded cue of one track in place. If the cues are not
+  // loaded yet (captions switched off), this is a no-op; the cuechange /
+  // track load listeners call it again once the learner turns captions on.
+  function translateTrack(tt, lang) {
+    if (!isCaptionTrack(tt) || tt.__rtLang === lang || tt.__rtBusy === lang) return;
+    var cues = null;
+    try { cues = tt.cues; } catch (e) {}
+    if (!cues || !cues.length) return;
+
+    var list = Array.prototype.slice.call(cues);
+    var texts = list.map(function (c) { return c.__rtOrig !== undefined ? c.__rtOrig : c.text; });
+    tt.__rtBusy = lang;
+    translateCaptionTexts(texts, lang, function (err, map) {
+      tt.__rtBusy = null;
+      if (err) { console.warn('[risecoursetranslate] Caption translation failed:', err); return; }
+      if (activeTranslation !== lang) return;
+      list.forEach(function (c, i) {
+        if (typeof c.text !== 'string') return;
+        if (c.__rtOrig === undefined) { c.__rtOrig = c.text; capCues.push(c); }
+        var tr = map[texts[i]];
+        if (tr && c.text !== tr) { try { c.text = tr; } catch (e) {} }
+      });
+      tt.__rtLang = lang;
+      if (capTracks.indexOf(tt) === -1) capTracks.push(tt);
+      refreshActiveCues(tt);
+      scanCaptionEls(lang);
+    });
+  }
+
+  // A caption already on screen keeps its old text until the next cue
+  // starts, which can be many seconds. Removing and re-adding the active
+  // cues makes the browser (and players listening to cuechange) redraw now.
+  function refreshActiveCues(tt) {
+    var active = null;
+    try { active = tt.activeCues; } catch (e) {}
+    if (!active || !active.length) return;
+    Array.prototype.slice.call(active).forEach(function (c) {
+      try { tt.removeCue(c); tt.addCue(c); } catch (e) {}
+    });
+  }
+
+  function scanCaptionEls(lang) {
+    getTranslateRoots().forEach(function (root) {
+      root.querySelectorAll(CAPTION_EL_SEL).forEach(function (el) {
+        var cap = captionElFor(el);
+        if (cap) translateCaptionEl(cap, lang);
+      });
+    });
+  }
+
+  function hookTrack(tt) {
+    if (!isCaptionTrack(tt) || tt.__rtHooked) return;
+    tt.__rtHooked = true;
+    tt.addEventListener('cuechange', function () {
+      var lang = activeTranslation;
+      if (!lang) return;
+      // Cues a player adds later (or a track that just loaded) arrive untranslated.
+      var active = null;
+      try { active = tt.activeCues; } catch (e) {}
+      var fresh = active && Array.prototype.some.call(active, function (c) { return c.__rtOrig === undefined; });
+      if (fresh && tt.__rtLang === lang) tt.__rtLang = null;
+      translateTrack(tt, lang);
+    });
+  }
+
+  function hookVideo(video) {
+    if (capHooked) { if (capHooked.has(video)) return; capHooked.add(video); }
+    else { if (video.__rtCapHooked) return; video.__rtCapHooked = true; }
+    var tts = video.textTracks;
+    if (tts && tts.addEventListener) {
+      tts.addEventListener('addtrack', function (e) {
+        hookTrack(e.track);
+        if (activeTranslation) translateTrack(e.track, activeTranslation);
+      });
+    }
+    // <track> load events don't bubble; capture them on the video.
+    video.addEventListener('load', function (e) {
+      if (!activeTranslation || !e.target || e.target.tagName !== 'TRACK') return;
+      var tt = e.target.track;
+      if (tt) { tt.__rtLang = null; translateTrack(tt, activeTranslation); }
+    }, true);
+  }
+
+  function translateCaptions(lang) {
+    if (!lang) return;
+    getTranslateRoots().forEach(function (root) {
+      initCaptionObserver(root);
+      root.querySelectorAll('video').forEach(function (video) {
+        hookVideo(video);
+        var tts = video.textTracks || [];
+        for (var i = 0; i < tts.length; i++) {
+          hookTrack(tts[i]);
+          translateTrack(tts[i], lang);
+        }
+      });
+    });
+    scanCaptionEls(lang);
+    relabelCaptionTracks(lang);
+  }
+
+  // The caption line element for a node, or null if the node is not a
+  // caption line inside a media player (menus, buttons and settings excluded).
+  function captionElFor(node) {
+    var el = node && (node.nodeType === 3 ? node.parentElement : node);
+    if (!el || !el.closest) return null;
+    el = el.closest(CAPTION_EL_SEL);
+    if (!el || el.closest(CAPTION_NOT_SEL) || el.closest('#' + BAR_ID) || !el.closest(MEDIA_SEL)) return null;
+    // Prefer the outermost caption element so a line split across spans is
+    // translated as one sentence, unless that wrapper also holds controls.
+    var up = el.parentElement;
+    while (up && up.matches && up.matches(CAPTION_EL_SEL) && !up.closest(CAPTION_NOT_SEL) && !up.querySelector(CAPTION_NOT_SEL)) {
+      el = up;
+      up = up.parentElement;
+    }
+    return el;
+  }
+
+  function translateCaptionEl(el, lang) {
+    var key = normCap(el.textContent);
+    if (key.length < 2 || looksLikeMediaUI(key)) return;
+    var orig = capOrig[key] || key;
+    var pendKey = lang + '|' + orig;
+    if (capPending[pendKey]) return;
+    capPending[pendKey] = true;
+    translateCaptionTexts([orig], lang, function (err, map) {
+      delete capPending[pendKey];
+      if (err || activeTranslation !== lang || !el.isConnected) return;
+      var tr = map[orig];
+      // Only write if the line on screen hasn't moved on to the next cue.
+      if (!tr || normCap(el.textContent) !== key || key === normCap(tr)) return;
+      if (!capEls.some(function (r) { return r.el === el; })) capEls.push({ el: el });
+      setBlockTranslatedText(el, orig, tr);
+    });
+  }
+
+  function initCaptionObserver(root) {
+    if (!root || root.__rtCapObs || typeof MutationObserver === 'undefined') return;
+    root.__rtCapObs = new MutationObserver(function (mutations) {
+      var lang = activeTranslation;
+      if (!lang) return;
+      var found = [];
+      var inPlayer = false;
+      function add(node) {
+        var el = node && (node.nodeType === 3 ? node.parentElement : node);
+        if (!inPlayer && el && el.closest && el.closest(MEDIA_SEL)) inPlayer = true;
+        var cap = captionElFor(node);
+        if (cap && found.indexOf(cap) === -1) found.push(cap);
+      }
+      mutations.forEach(function (m) {
+        add(m.target);
+        Array.prototype.forEach.call(m.addedNodes || [], function (n) {
+          add(n);
+          if (n.nodeType === 1 && n.querySelectorAll) n.querySelectorAll(CAPTION_EL_SEL).forEach(add);
+          if (n.nodeType === 1 && n.tagName === 'VIDEO') translateCaptions(lang);
+        });
+      });
+      found.forEach(function (el) { translateCaptionEl(el, lang); });
+      // The player may (re)draw its CC menu at any time; keep it renamed.
+      if (inPlayer) relabelCaptionMenus(root, langLabel(lang));
+    });
+    root.__rtCapObs.observe(root, { childList: true, subtree: true, characterData: true });
+  }
+
+  /* Caption menu label: the only uploaded track is usually named "English",
+     so after switching to French the player's CC menu still offered
+     "English". Rename the track (and the menu text the player already drew)
+     to the active language; Reset puts the original name back. */
+  var capLabelNodes = [];   // [{node, orig}] menu text nodes we renamed
+  var capLabelOrig  = {};   // original track labels -> true
+
+  function langLabel(code) {
+    for (var i = 0; i < LANGUAGES.length; i++) if (LANGUAGES[i].code === code) return LANGUAGES[i].label.replace(/\s*\(default\)$/, '');
+    return code;
+  }
+
+  function relabelCaptionTracks(lang) {
+    var label = lang ? langLabel(lang) : null;
+    getTranslateRoots().forEach(function (root) {
+      root.querySelectorAll('video track').forEach(function (t) {
+        var kind = (t.getAttribute('kind') || '').toLowerCase();
+        if (kind !== 'captions' && kind !== 'subtitles') return;
+        if (!t.hasAttribute('data-rt-orig-label')) {
+          if (!label) return;
+          t.setAttribute('data-rt-orig-label', t.getAttribute('label') || '');
+        }
+        var orig = t.getAttribute('data-rt-orig-label');
+        if (orig) capLabelOrig[orig] = true;
+        var want = label || orig;
+        if (t.getAttribute('label') !== want) t.setAttribute('label', want);
+        if (!label) t.removeAttribute('data-rt-orig-label');
+      });
+      relabelCaptionMenus(root, label);
+    });
+  }
+
+  // Rename menu entries the player drew from the track label. Only exact
+  // matches of an original track label inside a media player menu are touched.
+  function relabelCaptionMenus(root, label) {
+    capLabelNodes = capLabelNodes.filter(function (r) { return r.node.isConnected; });
+    capLabelNodes.forEach(function (r) {
+      var want = label || r.orig;
+      if (r.node.nodeValue !== want) r.node.nodeValue = want;
+    });
+    if (!label || !Object.keys(capLabelOrig).length) return;
+    root.querySelectorAll(MEDIA_SEL).forEach(function (player) {
+      var tw = player.ownerDocument.createTreeWalker(player, NodeFilter.SHOW_TEXT, null), n;
+      while ((n = tw.nextNode())) {
+        var txt = trimTerm(n.nodeValue);
+        if (!capLabelOrig[txt]) continue;
+        var el = n.parentElement;
+        if (!el || !el.closest('[role^="menuitem"],[role="option"],[class*="menu"],[class*="Menu"],li')) continue;
+        if (capLabelNodes.some(function (r) { return r.node === n; })) continue;
+        capLabelNodes.push({ node: n, orig: n.nodeValue });
+        n.nodeValue = label;
+      }
+    });
+  }
+
+  function restoreCaptions() {
+    relabelCaptionTracks(null);
+    capLabelNodes = [];
+    capCues.forEach(function (c) {
+      try { c.text = c.__rtOrig; } catch (e) {}
+      try { delete c.__rtOrig; } catch (e) { c.__rtOrig = undefined; }
+    });
+    capCues = [];
+    capTracks.forEach(function (tt) { tt.__rtLang = null; tt.__rtBusy = null; refreshActiveCues(tt); });
+    capTracks = [];
+    capEls.forEach(function (r) {
+      if (!r.el.isConnected) return;
+      var orig = capOrig[normCap(r.el.textContent)];
+      if (orig) setBlockTranslatedText(r.el, '', orig);
+    });
+    capEls = [];
   }
 
   /* ── GOOGLE TRANSLATE ────────────────────────────────────────────── */
@@ -1423,6 +1835,7 @@
 
   /* ── RESTORE ─────────────────────────────────────────────────────── */
   function restorePage() {
+    restoreCaptions();
     originalMap.forEach(function (orig, el) {
       var snap = originalNodes && originalNodes.get(el);
       if (snap && snap.length) {
