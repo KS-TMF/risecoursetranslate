@@ -3,6 +3,8 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.3 — "English (original)" at the top of the language list; picking
+ *           it does the same as Reset.
  * v1.12.2 — captions drawn by the browser are shown at 70% size (they scale
  *           with the video and got very large on wide screens). Override per
  *           course with data-caption-size="85%" on the script tag; "100%" = off.
@@ -50,11 +52,14 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.2';
+  window.__riseTranslateVersion = '1.12.3';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
   var LANGUAGES = [
+    // Picking this one is the same as Reset: it puts the course back to its
+    // original English text and captions (nothing is translated).
+    { code: 'en', label: 'English (original)' },
     { code: 'af', label: 'Afrikaans' },
     { code: 'ar', label: 'Arabic', rtl: true },
     { code: 'zh', label: 'Chinese (Simplified)' },
@@ -437,13 +442,7 @@
     resetBtn.style.display = 'none';
     resetBtn.addEventListener('mousedown', function (e) {
       e.preventDefault();
-      restorePage();
-      clearSavedLang();
-      activeTranslation = null;
-      setTriggerLabel(null);
-      resetBtn.style.display = 'none';
-      list.querySelectorAll('.rt-option').forEach(function (o) { o.classList.remove('rt-selected'); });
-      broadcastLangToBlocks('en');
+      resetToOriginal(list);
     });
 
     bar.appendChild(wrap);
@@ -692,9 +691,25 @@
     txt.textContent = lang ? lang.label : code;
   }
 
+  function resetToOriginal(list) {
+    var bar = barRef || document.getElementById(BAR_ID);
+    restorePage();
+    clearSavedLang();
+    activeTranslation = null;
+    setTriggerLabel(null);
+    if (bar && bar._reset) bar._reset.style.display = 'none';
+    list.querySelectorAll('.rt-option').forEach(function (o) { o.classList.remove('rt-selected'); });
+    broadcastLangToBlocks('en');
+  }
+
   function selectLanguage(code, list) {
     var bar = barRef || document.getElementById(BAR_ID);
     if (!bar) return;
+    if (code === 'en') {
+      if (bar._trigger && bar._panel) closePanel(bar._trigger, bar._panel);
+      resetToOriginal(list);
+      return;
+    }
     setTriggerLabel(code);
     saveLang(code);
     activeTranslation = code;
