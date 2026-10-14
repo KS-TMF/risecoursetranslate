@@ -3,6 +3,8 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.7 — the note under the language selector switches to the chosen
+ *           language ("Reset" stays in English to match the button).
  * v1.12.6 — the video's CC menu names the caption track after the chosen
  *           language (e.g. "French" instead of the uploaded "English");
  *           Reset restores the original name.
@@ -61,7 +63,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.6';
+  window.__riseTranslateVersion = '1.12.7';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -335,6 +337,35 @@
            '\nvideo::cue{font-size:' + size + ';}\n';
   }
 
+  /* ── COVER NOTE ─────────────────────────────────────────────────── */
+  // The note under the selector follows the chosen language. "Reset" is kept
+  // in English inside it so it matches the Reset button's label.
+  var HINT_EN = 'English is the default language. You can continue without selecting a language, and use the Reset button at any time to return to English.';
+  var hintCache = {};
+
+  function setHint(text) {
+    var bar = barRef || document.getElementById(BAR_ID);
+    var el = bar && bar.querySelector('.rt-hint');
+    if (el && el.textContent !== text) el.textContent = text;
+  }
+
+  function translateHint(lang) {
+    if (!lang || lang === 'en') return setHint(HINT_EN);
+    if (hintCache[lang]) return setHint(hintCache[lang]);
+    // Translate the whole note in one go (splitting it around "Reset" broke
+    // the grammar). Quoting "Reset" makes Google keep it as a label, then the
+    // quoted word is put back to "Reset" so it matches the button.
+    googleTranslate([HINT_EN.replace('the Reset button', 'the "Reset" button')], lang, function (err, results) {
+      if (err || !results || !results[0]) return;
+      var out = results[0].replace(/([\u0022\u201C\u201E\u00AB\u300C\u300E\u2018])\s*[^\u0022\u201C\u201D\u201E\u00AB\u00BB\u300C\u300D\u300E\u300F\u2018\u2019]{1,40}?\s*([\u0022\u201D\u201C\u00BB\u300D\u300F\u2019])/, function (m, open, close) {
+        var pad = open === '\u00AB' ? '\u00A0' : '';
+        return open + pad + 'Reset' + pad + close;
+      });
+      hintCache[lang] = out;
+      if (activeTranslation === lang) setHint(out);
+    });
+  }
+
   /* ── BAR ────────────────────────────────────────────────────────── */
   function injectBar() {
     if (barRef) return barRef;
@@ -462,7 +493,7 @@
     /* short note under the selector (shown on the course cover only) */
     var hint = document.createElement('p');
     hint.className = 'rt-hint';
-    hint.textContent = 'English is the default language. You can continue without selecting a language, and use the Reset button at any time to return to English.';
+    hint.textContent = HINT_EN;
 
     bar.appendChild(wrap);
     bar.appendChild(spinner);
@@ -716,6 +747,7 @@
     restorePage();
     clearSavedLang();
     activeTranslation = null;
+    setHint(HINT_EN);
     setTriggerLabel(null);
     if (bar && bar._reset) bar._reset.style.display = 'none';
     list.querySelectorAll('.rt-option').forEach(function (o) {
@@ -1340,6 +1372,7 @@
     });
     toTranslate = unique(toTranslate);
 
+    translateHint(lang);
     var langObj = LANGUAGES.find(function (l) { return l.code === lang; });
     document.body.style.direction = (langObj && langObj.rtl) ? 'rtl' : '';
 
