@@ -38,8 +38,31 @@ Paste in **`scormcontent/index.html`**.
 | 8 | Dropdown search broke when the panel was portaled to `<body>` (to escape Rise's overflow clipping) | Search filtered options in the wrong DOM location once portaled | v1.9.1 — fixed language search to work against the portaled panel |
 | 9 | Custom HTML/JavaScript code blocks were invisible to the translator — only Rise's own text and video captions were covered | Code blocks render in a sandboxed `<iframe>` with arbitrary markup the bar can't safely walk | v1.10.0 — **code blocks now translate.** Prototyped separately (`Rise_Translate_Test_v1.0` repo), then merged into main. See `CODE-BLOCKS.md` for the full mechanism. |
 | 10 | Video captions (WebVTT) stayed in English | The v1.11.x attempt was reverted to be safe | v1.12.0 (on the `test` branch first) — cue text is translated in place on caption tracks, and caption lines a player draws into the page are swapped as they appear. Track on/off modes are never changed. Test page: `test-captions.html`. |
+| 11 | Switching language left the on-screen caption in the old language | Browsers only redraw a caption when the next cue starts | v1.12.1 — active cues are removed and re-added so the caption redraws at once |
+| 12 | CC menu still said "English" after picking another language | The only uploaded track is named English | v1.12.6 — the track and the player's menu entry are renamed to the chosen language; Reset restores "English" |
+| 13 | Learners didn't know English was the default or how to go back | No English option; Reset only | v1.12.3–1.12.7 — "English (default)" selected at the top of the list, plus a note under the selector on the cover that follows the chosen language ("Reset" kept in English to match the button) |
+| 14 | Captions looked huge, then tiny | Browser captions scale with the video; a 70% shrink (v1.12.2) clashed with Rise's player | v1.12.5 — back to the browser's default size; `data-caption-size` is opt-in only |
+| 15 | Test course showed old features even after clearing the cache | jsDelivr's `@test` alias lagged hours behind GitHub (served 1.12.3 while test was 1.12.7), and purges got throttled | `test-loader.js` — test courses load it from a fixed commit; it asks GitHub for the newest `test` commit and loads that exact version |
+| 16 | Glossary didn't work in the test course | `Translation Glossary.csv` was at the top of the zip, not inside `scormcontent/` | Put the CSV inside `scormcontent/` next to `index.html` (92 terms loaded once moved) |
+| 17 | The word "It" stayed in English | Glossary term "IT" matched case-insensitively | v1.12.8 — all-capitals terms (IT, ODF, UML) only match in capitals |
 
 ---
+
+## Test branch status (2026-10-14)
+
+All work is on the `test` branch (currently **v1.12.8**). Test courses use the loader line, which always runs the newest `test` commit:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@d191a1f88aa8d62a8b0de5219c6e72d7dd3007e9/test-loader.js" data-glossary="Translation Glossary.csv" defer></script>
+```
+
+Confirmed working in LearnUpon with the loader line: captions translate and switch instantly, CC menu shows the chosen language, English (default) + translated cover note. Glossary works once the CSV is inside `scormcontent/`.
+
+Still open:
+- A glossary term split across two caption lines ("…the Information" / "Framework is…") isn't recognised.
+- Plurals aren't covered by singular glossary terms ("frameworks" vs "Framework") — add plural rows.
+- Generic glossary rows (e.g. "Model") stop those words translating everywhere — review the CSV.
+- Edit `index.html` in a plain-text editor: TextEdit's curly quotes or a pasted `%22` break the script line.
 
 ## Core problem (still relevant)
 
