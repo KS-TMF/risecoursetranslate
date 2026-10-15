@@ -25,6 +25,14 @@ when the release is pushed to `main` (see "Going live"). If you push a new
 version, update this table and "How to verify it works" at the same time —
 these numbers have drifted before.
 
+**How to tell which version a course runs, without the console:** the
+selector says **"English (default)"** on v1.12.4 and later, and **"Select
+language"** on v1.10.13 and earlier (which also has no note under it).
+
+**Release status:** branch `release-1.12.9` holds the v1.12.9 release for
+`main`, with these docs updated for go-live. **On hold** — `main` is
+unchanged until the go-live decision.
+
 ---
 
 ## What this does
@@ -255,6 +263,7 @@ Open the course, open a lesson with a translated code block, then **F12 → Cons
 | Code block translated twice / garbled | Only load `translate-core.js` once per block; don't also let the course bar try to walk unmanaged content inside it |
 | jsDelivr serving old code after a push | The CDN keeps `@main` / `@test` for up to 12 hours and browsers for up to 7 days. Purge the CDN copy (see "Going live"), then hard-refresh (Cmd+Shift+R). Test courses avoid this with the loader line |
 | Language selector missing on first visit until a refresh | Fixed in v1.12.9 — the selector used to wait for the glossary, and a slow first CDN request could hold it back for 20s+ |
+| No note under the selector / selector says "Select language" | The course is running the live version (v1.10.13) — the note arrives with the v1.12.9 release. Test courses need the loader line |
 | Captions stay in English | Captions translate on v1.12.x (`test`) only. Turn captions on with the player's CC button, then pick a language |
 | CDN answers `503 No healthy backends` | A jsDelivr outage for files it hasn't cached yet — usually clears within minutes. Already-cached files keep working |
 | Script line stopped working after editing `index.html` | Edit in a plain-text editor — TextEdit's curly quotes or a pasted `%22` break the line |
