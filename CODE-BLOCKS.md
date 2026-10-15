@@ -1,5 +1,7 @@
 # Translating Rise Code Blocks
 
+> The current version of this content lives in `SETUP-GUIDE.md` ("Translating code blocks — full mechanism"). This file is kept for reference.
+
 This explains the feature added in **v1.10.0**: Rise "code block" interactions
 (built with custom HTML/JavaScript) now translate along with the rest of the
 course. Before v1.10.0, code blocks were invisible to the translator — the
@@ -77,7 +79,7 @@ Inside the Rise code block's HTML, add one line near the bottom (after your
 own markup and script, so it can see the finished DOM):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Moyour/risecoursetranslate@main/translate-core.js" defer></script>
+<script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/translate-core.js" defer></script>
 ```
 
 See `code-block.html` in this repo for a full worked example — a diagram,
@@ -132,7 +134,7 @@ Console**:
 
 | Check | Expected |
 |---|---|
-| `window.TRANSLATE_CORE_VERSION` (run inside the block's iframe context, or check via the block's own console if you can select its frame) | `"1.0"` |
+| `window.TRANSLATE_CORE_VERSION` (run inside the block's iframe context, or check via the block's own console if you can select its frame) | `"1.2.1"` |
 | Switch language in the course dropdown | Code block text changes language within ~1.5s |
 | Click Reset | Code block reverts to English |
 | Set `window.TC_DEBUG = true` inside the block | Logs `[translate-core] {...}` every 2s with counts of observer fires, cache reapplies, full passes, network fetches — useful for spotting a block that's fighting the engine (fast-climbing `cacheReapplies`) |

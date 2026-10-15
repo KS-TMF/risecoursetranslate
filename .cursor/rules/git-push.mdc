@@ -1,5 +1,5 @@
 ---
-description: Push completed work to GitHub on main branch
+description: Push completed work to GitHub on the test branch
 alwaysApply: true
 ---
 
@@ -8,7 +8,8 @@ alwaysApply: true
 When finishing changes in this repo:
 
 1. Commit with a clear message describing why.
-2. Push to `origin main` — do not create new version tags unless the user asks.
-3. The canonical CDN link uses `@main`; pushing to main is enough for courses to get updates.
+2. Push to `origin test` — all new work is tested there first. Do not create new version tags unless the user asks.
+3. Test courses use `test-loader.js` (see SETUP-GUIDE.md "Test branch"), which runs the newest `test` commit. After pushing, check `https://api.github.com/repos/KS-TMF/risecoursetranslate/commits/test` shows the new commit.
+4. Only push to `main` when the user says to go live. Live courses use `@main`; after a push to main, purge `https://purge.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js` and confirm the CDN serves the new version.
 
 Only skip push if the user explicitly says not to, or if there are no changes to commit.
