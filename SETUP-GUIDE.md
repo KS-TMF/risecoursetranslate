@@ -13,24 +13,20 @@ That file is history; this file is current behavior.
 
 ---
 
-## ⚠️ Known documentation/code mismatch (unresolved)
+## Versions at a glance (checked against the code)
 
-The version numbers previously written in this guide did not match the
-actual shipped code. Confirmed by inspecting the files directly:
+| Where | `risecoursetranslate.js` | `translate-core.js` | Who uses it |
+|---|---|---|---|
+| `main` branch (`@main` on the CDN) | **v1.12.9** | 1.2.1 | Live courses |
+| `test` branch | **v1.12.9** (newer work lands here first) | 1.2.1 | Test courses, via the loader line (see "Test branch") |
 
-| File | Docs previously said | Code actually says |
-|---|---|---|
-| `risecoursetranslate.js` (`window.__riseTranslateVersion`) | `"1.10.4"` | `"1.10.11"` |
-| `translate-core.js` (`window.TRANSLATE_CORE_VERSION`) | `"1.0"` | `"1.2"` |
+Previous live version: **v1.10.13** (tag `v1.10.13`, the rollback point).
+If you push a new version, update this table and "How to verify it works" at
+the same time — these numbers have drifted before.
 
-This guide now states the **actual code values**. If you push a new version,
-update the table in "How to verify it works" below at the same time — this
-has drifted before.
-
-`scripts/update-glossary.py` and `scripts/verify-glossary.mjs` are
-referenced throughout this guide but were **not available to review** when
-this version of the guide was written — their descriptions below are
-carried over from the previous docs, unverified against actual code.
+**How to tell which version a course runs, without the console:** the
+selector says **"English (default)"** on v1.12.4 and later, and **"Select
+language"** on v1.10.13 and earlier (which also has no note under it).
 
 ---
 
@@ -39,7 +35,8 @@ carried over from the previous docs, unverified against actual code.
 - Adds a language dropdown to Rise courses
 - Translates course text via Google Translate (free, no API key)
 - Keeps glossary terms **untranslated** in every language (brand names, acronyms, etc.)
-- Translates custom HTML/JavaScript **code blocks** too, not just Rise's own text and video captions — see "Translating code blocks" below
+- Translates custom HTML/JavaScript **code blocks** too, not just Rise's own text — see "Translating code blocks" below
+- Translates **video captions** live, renames the CC menu entry to the chosen language, and shows "English (default)" plus a short note under the selector on the course cover — see "Video captions" below
 
 ---
 
@@ -51,7 +48,7 @@ Paste once in **`scormcontent/index.html`**. **Your team does not update this.**
 <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
 ```
 
-`@main` always uses the latest version on GitHub — no new link when we push fixes.
+`@main` always points at the latest version on GitHub — no new link when we push fixes. **It is not instant, though:** the jsDelivr CDN keeps its copy of `@main` for up to 12 hours, and each learner's browser may keep its own copy for up to 7 days. After a push, purge the CDN copy (see "Going live") and expect a few learners to get the new version only after their browser refreshes its copy.
 
 **Direct GitHub (bypass CDN cache)** — use this if jsDelivr is serving a stale version:
 
@@ -71,7 +68,43 @@ Paste once in **`scormcontent/index.html`**. **Your team does not update this.**
 
 ## Current version
 
-**v1.10.11** (`risecoursetranslate.js`, confirmed from code) — see the mismatch note above.
+- **Live (`main`):** v1.12.9
+- **Test (`test`):** v1.12.9 or newer
+
+See "Versions at a glance" above.
+
+---
+
+## Test branch
+
+All new work goes to the `test` branch first. Test courses use this line
+instead of the `@main` line:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@d191a1f88aa8d62a8b0de5219c6e72d7dd3007e9/test-loader.js" data-glossary="Translation Glossary.csv" defer></script>
+```
+
+`test-loader.js` is loaded from a fixed commit, asks GitHub for the newest
+`test` commit, and loads `risecoursetranslate.js` at exactly that commit —
+so a test course always runs the latest `test` code, with none of jsDelivr's
+`@test` caching delay. If GitHub can't be reached it falls back to `@test`.
+**For test courses only** — live courses keep the `@main` line.
+
+After pushing to `test`, check
+`https://api.github.com/repos/KS-TMF/risecoursetranslate/commits/test`
+shows the new commit; the loader picks it up from then on.
+
+---
+
+## Going live (test → main)
+
+1. Push the tested script to `main`.
+2. Purge the CDN copy: open
+   `https://purge.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js`
+   (repeat if it reports `"throttled": true`).
+3. Check `https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js`
+   shows the new `__riseTranslateVersion`, then open a live course.
+4. Rollback = put the previous version (tag `v1.10.13`) back on `main` and purge again — the same delays apply.
 
 ---
 
@@ -115,8 +148,12 @@ Double-click **Update Glossary** — it puts **`Translation Glossary.csv`** in `
 ```
 scormcontent/
   index.html                  ← script line + embedded glossary (auto)
-  Translation Glossary.csv    ← your glossary file
+  Translation Glossary.csv    ← your glossary file (recommended place)
 ```
+
+From v1.12.9 the script also finds `Translation Glossary.csv` if it was left
+at the top of the zip (next to the `scormcontent/` folder), which is an easy
+mistake when re-zipping.
 
 ### Step 3 — Re-zip and upload
 
@@ -157,6 +194,11 @@ Update Glossary syncs your CSV into `index.html` as a hidden block:
 
 The course reads that — **no .js files**.
 
+If there is no embedded block, the script fetches the CSV instead. It tries
+`scormcontent/`, then (v1.12.9+) the top of the zip, then the CDN folder.
+Each attempt gives up after 5 seconds, and the language selector no longer
+waits for any of this — it shows straight away.
+
 You may still see `Glossary fetch failed` for the CSV file — that is OK if you see:
 
 ```
@@ -183,11 +225,13 @@ Glossary loaded: 49 protected term(s) from embedded-csv
 
 | Check | Expected |
 |-------|----------|
-| `window.__riseTranslateVersion` | `"1.10.11"` |
-| `window.__riseGlossaryCount` | `49` (or your term count) |
-| Console | `Glossary loaded: X protected term(s) from embedded-csv` |
+| `window.__riseTranslateVersion` | `"1.12.9"` (or newer on test courses) |
+| `window.__riseGlossaryCount` | Your term count (e.g. `92` in the ODF course) |
+| Console | `Glossary loaded: X protected term(s) from …` (embedded-csv or the CSV's address) |
+| First visit | The language selector appears within about a second, with no refresh needed (v1.12.9+) |
 
 Pick French/Spanish — glossary terms like **ODF**, **TM Forum** should stay in English.
+All-capitals terms (IT, ODF, UML) only match in capitals, so the word "It" still translates (v1.12.8+).
 
 ### Code blocks
 
@@ -195,7 +239,7 @@ Open the course, open a lesson with a translated code block, then **F12 → Cons
 
 | Check | Expected |
 |---|---|
-| `window.TRANSLATE_CORE_VERSION` (run inside the block's iframe context, or select its frame in devtools) | `"1.2"` |
+| `window.TRANSLATE_CORE_VERSION` (run inside the block's iframe context, or select its frame in devtools) | `"1.2.1"` |
 | Switch language in the course dropdown | Code block text changes language within ~1.5s |
 | Click Reset | Code block reverts to English |
 | Set `window.TC_DEBUG = true` inside the block | Logs `[translate-core] {...}` every 2s with counts of observer fires, cache reapplies, full passes, network fetches — useful for spotting a block that's fighting the engine (fast-climbing `cacheReapplies`) |
@@ -212,7 +256,34 @@ Open the course, open a lesson with a translated code block, then **F12 → Cons
 | Re-publish from Rise | Re-run **Update Glossary** (re-embeds CSV into index.html); the script line is also wiped by Rise re-export and must be re-pasted |
 | Code block not translating | Confirm the `translate-core.js` line is inside that specific code block's HTML, near the bottom (after your own markup/script) |
 | Code block translated twice / garbled | Only load `translate-core.js` once per block; don't also let the course bar try to walk unmanaged content inside it |
-| jsDelivr serving old code after a push | `@main` is cached by jsDelivr for a few minutes — hard-refresh, or temporarily switch to the raw.githubusercontent.com URL above |
+| jsDelivr serving old code after a push | The CDN keeps `@main` / `@test` for up to 12 hours and browsers for up to 7 days. Purge the CDN copy (see "Going live"), then hard-refresh (Cmd+Shift+R). Test courses avoid this with the loader line |
+| Language selector missing on first visit until a refresh | Fixed in v1.12.9 — the selector used to wait for the glossary, and a slow first CDN request could hold it back for 20s+ |
+| Captions stay in English | Needs v1.12.0+. Turn captions on with the player's CC button, then pick a language |
+| No note under the selector / selector says "Select language" | The course is running v1.10.13 or older — a stale copy. Purge the CDN (see "Going live") and hard-refresh |
+| CDN answers `503 No healthy backends` | A jsDelivr outage for files it hasn't cached yet — usually clears within minutes. Already-cached files keep working |
+| Script line stopped working after editing `index.html` | Edit in a plain-text editor — TextEdit's curly quotes or a pasted `%22` break the line |
+
+---
+
+## Video captions (v1.12.0+)
+
+- Caption (WebVTT) cue text is translated in place, and caption lines the
+  Rise player draws into the page are swapped as they appear. Track on/off
+  modes are never changed — learners still turn captions on with CC.
+- Switching language redraws the caption already on screen straight away.
+- The CC menu entry is renamed to the chosen language; Reset restores "English".
+- Captions keep the browser's default size. A course can opt in to another
+  size with `data-caption-size="85%"` on the script tag.
+- The language list starts with **English (default)**, and the course cover
+  shows a note under the selector that follows the chosen language ("Reset"
+  stays in English to match the button).
+- Known gaps: a glossary term split across two caption lines isn't
+  recognised; plurals need their own glossary rows; generic rows like
+  "Model" stop that word translating everywhere.
+
+Test pages: `test-captions.html` and `test-captions-spa.html`. For a caption
+that won't translate on a real course, `scripts/caption-diagnostic.js`
+produces a report (developer use).
 
 ---
 
@@ -372,19 +443,23 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 
 | File | Purpose | Notes |
 |------|---------|-------|
-| `risecoursetranslate.js` | Main translator (course-level bar) — loaded from CDN via the one script line | `__riseTranslateVersion = "1.10.11"` |
-| `translate-core.js` | Translator for individual code blocks — loaded from CDN, one line per block | `TRANSLATE_CORE_VERSION = "1.2"`; has its own hardcoded `KEEP` list and `ENGINE` switch |
+| `risecoursetranslate.js` | Main translator (course-level bar) — loaded from CDN via the one script line | `__riseTranslateVersion` = `"1.12.9"` |
+| `test-loader.js` | **On the `test` branch only** — test courses load it from a fixed commit; it loads the newest `test` commit (see "Test branch") | Not needed on `main` |
+| `translate-core.js` | Translator for individual code blocks — loaded from CDN, one line per block | `TRANSLATE_CORE_VERSION = "1.2.1"`; has its own hardcoded `KEEP` list and `ENGINE` switch |
 | `code-block.html` | Worked example of a code block wired up with `translate-core.js` | Demo content only — diagram, reveal-scenario, form input, `data-notranslate` sample |
 | `Update Glossary.command` | Double-click to sync `Translation Glossary.csv` into the course — **Mac only** | Bash script: `cd`s to its own folder, runs `scripts/update-glossary.py`, shows a macOS notification on success via `osascript` |
 | `Update Glossary.bat` | Double-click to sync `Translation Glossary.csv` into the course — **Windows only** | Batch script: same job as the `.command` file, calls the same `scripts/update-glossary.py`, no macOS notification, pauses at the end so the window stays open |
-| `scripts/update-glossary.py` | Backend for Update Glossary — reads CSV/Excel, copies CSV, embeds it in `index.html` | *Referenced, not included in this upload — unverified* |
-| `scripts/verify-glossary.mjs` | Dev check — confirms the CSV parses correctly | *Referenced, not included in this upload — unverified* |
-| `glossary_example.csv` | Example glossary format (fake terms: `ExampleBrand`, `ACME-0001`, `Digital Twin`) | Copy this format for your real `Translation Glossary.csv` |
-| `glossary-course-folder_example.txt` | Template — copy to `glossary-course-folder.txt` and fill in your `scormcontent` path | One-time setup step |
+| `scripts/update-glossary.py` | Backend for Update Glossary — reads CSV/Excel (looks in Downloads if no file is given), writes the CSV, and if `glossary-course-folder.txt` is set, copies it into the course and embeds it in `index.html` | Python 3 |
+| `scripts/verify-glossary.mjs` | Dev check — confirms the CSV parses the same way the script does. Run: `node scripts/verify-glossary.mjs [path/to/glossary.csv]` | Node |
+| `glossary_example.csv` / `glossary.example.csv` | Example glossary format (fake terms: `ExampleBrand`, `ACME-0001`, `Digital Twin`) — the two files are identical | Copy this format for your real `Translation Glossary.csv` |
+| `glossary-course-folder_example.txt` / `glossary-course-folder.example.txt` | Template — copy to `glossary-course-folder.txt` and fill in your `scormcontent` path (the two files are identical) | One-time setup step |
+| `test-captions.html`, `test-captions-spa.html`, `test-captions.mp4`, `test-captions.vtt`, `scripts/caption-diagnostic.js` | Caption test pages, sample media and diagnostic | **On the `test` branch only** |
 | `test.html` | Local mock of a Rise cover page + lesson, wired to `risecoursetranslate.js` with an inline embedded glossary | Open directly in a browser to sanity-check the course bar without a real Rise export |
 | `test-code-block.html` | Local mock of the **iframe/code-block** flow — a course shell page that builds an iframe via `srcdoc`, loads `translate-core.js` inside it, and confirms the bar's language broadcasts reach the iframe | Use this specifically to test the code-block `postMessage` handshake, separately from the glossary test in `test.html` |
 | `SETUP-GUIDE.md` | This file — setup instructions, code-block mechanism, and full file reference | Source of truth |
 | `CHAT-SUMMARY.md` | Project history — issues faced and fixes, version timeline | Historical log, not instructions |
+| `CODE-BLOCKS.md` | Older standalone copy of the code-block mechanism | Kept for reference; the section in this guide is the current one |
+| `.cursor/rules/git-push.mdc` | Push rule for the Cursor editor | Push to `test`; `main` only when going live |
 | `.gitignore` | Keeps private/local files out of the public repo | Currently ignores `Translation Glossary.csv` and `glossary-course-folder.txt` — i.e. exactly the two files that contain real client data or a local machine path |
 
 ### On your Mac (private — not on GitHub)
@@ -400,7 +475,7 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 | File | Purpose |
 |------|---------|
 | `scormcontent/index.html` | Rise course + CDN script line + embedded glossary |
-| `scormcontent/Translation Glossary.csv` | Glossary file in course package |
+| `scormcontent/Translation Glossary.csv` | Glossary file in course package (v1.12.9+ also finds it at the top of the zip) |
 
 ### Do NOT use (removed from repo)
 
@@ -411,7 +486,7 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 | `deepl-proxy.example.mjs` | Removed — not used |
 | Commit-pinned CDN URLs (as the default) | Use `@main` instead; pin only temporarily to freeze a version |
 | Public GitHub hosting of the real glossary | Privacy — glossary stays in course upload only |
-| Separate `CODE-BLOCKS.md` file | Merged into this guide — don't recreate it as a standalone doc |
+| Plain `@test` line in a test course | Lags hours behind; use the loader line |
 
 ---
 
@@ -419,6 +494,7 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 
 - **Course bar / glossary:** open `test.html` in a browser (use a local server if the glossary embed doesn't load over `file://`)
 - **Code-block iframe handshake:** open `test-code-block.html` — confirms `rise-lang` messages reach an iframe running `translate-core.js`
+- **Captions:** open `test-captions.html` / `test-captions-spa.html` through a local server
 
 ---
 
@@ -433,7 +509,14 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 | v1.8.9 | **CSV only** — embed via Update Glossary, no `.js` |
 | v1.9.1 | Fix language search when the dropdown panel is portaled to `<body>` |
 | v1.10.0 | **Code blocks now translate.** Adds `translate-core.js` and the broadcast/skip logic described above |
-| v1.10.4 (docs) / v1.10.11 (code) | Glossary CSV fetch fix for filenames with spaces — see the mismatch note at the top of this guide |
+| v1.10.1–v1.10.6 | Code-block sync fallback; glossary fixes (word boundaries, filenames with spaces); each text translated on its own |
+| v1.10.10–v1.10.13 | Skip video-player UI; keep Rise sidebar modules intact; Rise audio transcripts and hover tooltips translate — live until the v1.12.9 go-live; rollback point (tag `v1.10.13`) |
+| v1.12.0–v1.12.1 | Video captions translate live; on-screen caption redraws at once on switch |
+| v1.12.2–v1.12.5 | Caption size tried at 70%, then back to browser default (`data-caption-size` opt-in) |
+| v1.12.3–v1.12.7 | "English (default)" at the top of the list; translated note under the selector on the cover |
+| v1.12.6 | CC menu entry renamed to the chosen language |
+| v1.12.8 | All-capitals glossary terms (IT, ODF) only match in capitals |
+| v1.12.9 | Language selector shows immediately (no refresh needed on first visit); glossary requests time out after 5s; glossary at the top of the zip is found |
 
 ---
 
@@ -441,12 +524,13 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 
 1. **Re-export from Rise** overwrites `index.html` — must re-add script line and re-run **Update Glossary**
 2. **Local testing** via double-clicking `index.html` (`file://`) — CSV fetch will fail; embedded glossary should still work after Update Glossary
-3. **jsDelivr `@main` cache** — can take a few minutes to serve latest code after git push; hard-refresh browser
+3. **jsDelivr cache** — `@main`/`@test` can lag up to 12 hours behind GitHub and browsers keep copies up to 7 days; purge after pushing, and use the loader line for test courses
 4. **Glossary terms split across Rise spans** — long phrases may partially translate if Rise splits text oddly in DOM
 5. **Code-block glossary is separate** — `translate-core.js`'s `KEEP` list is not connected to the course glossary CSV (see "Open question" above)
 6. **DeepL engine is a stub** in both `translate-core.js` and any future DeepL work on the course bar — needs a server-side proxy before real use, so the API key never ships to the browser
-7. **Version numbers drift from code** — this guide's numbers were previously wrong for months; re-check `__riseTranslateVersion` / `TRANSLATE_CORE_VERSION` directly in code before publishing a version bump
+7. **Version numbers drift from code** — re-check `__riseTranslateVersion` / `TRANSLATE_CORE_VERSION` directly in code before publishing a version bump
+8. **Caption glossary gaps** — terms split across two caption lines, plurals, and generic rows (see "Video captions")
 
 ---
 
-*Last updated: July 2026. Merged `CODE-BLOCKS.md` into this guide, corrected version numbers against actual code, and documented `.gitignore`, `test-code-block.html`, and `scripts/` for the first time. See `CHAT-SUMMARY.md` for full project history.*
+*Last updated: 15 October 2026, for the v1.12.9 go-live — versions (live v1.12.9, rollback v1.10.13), test branch + loader, going-live steps, video captions, v1.12.9 first-visit selector fix, CDN caching facts, and the full file list. See `CHAT-SUMMARY.md` for full project history.*
