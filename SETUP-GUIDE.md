@@ -259,7 +259,7 @@ Open the course, open a lesson with a translated code block, then **F12 → Cons
 | jsDelivr serving old code after a push | The CDN keeps `@main` / `@test` for up to 12 hours and browsers for up to 7 days. Purge the CDN copy (see "Going live"), then hard-refresh (Cmd+Shift+R). Test courses avoid this with the loader line |
 | Language selector missing on first visit until a refresh | Fixed in v1.12.9 — the selector used to wait for the glossary, and a slow first CDN request could hold it back for 20s+ |
 | Captions stay in English | Needs v1.12.0+. Turn captions on with the player's CC button, then pick a language |
-| No note under the selector / selector says "Select language" | The course is running v1.10.13 or older — a stale copy. Purge the CDN (see "Going live") and hard-refresh |
+| No note under the selector / selector says "Select language" | The browser is running an old copy (v1.12.3 or older). Browsers keep a copy up to 7 days — hard-refresh (Cmd+Shift+R), and purge the CDN if the CDN itself is stale (see "Going live"). Test courses should use the loader line, not plain `@test` |
 | CDN answers `503 No healthy backends` | A jsDelivr outage for files it hasn't cached yet — usually clears within minutes. Already-cached files keep working |
 | Script line stopped working after editing `index.html` | Edit in a plain-text editor — TextEdit's curly quotes or a pasted `%22` break the line |
 
