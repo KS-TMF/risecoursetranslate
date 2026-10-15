@@ -3,6 +3,11 @@
  * Drop-in (one line in index.html + copy Translation Glossary.csv into course folder):
  * <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
  * CDN-bypass (always latest, no cache): <script src="https://raw.githubusercontent.com/KS-TMF/risecoursetranslate/main/risecoursetranslate.js" data-glossary="Translation Glossary.csv" defer></script>
+ * v1.12.9 — the language selector shows straight away instead of waiting
+ *           for the glossary file (a slow first CDN request could hide it
+ *           until a refresh); glossary requests give up after 5 seconds; a
+ *           glossary left in the course's top folder (next to scormcontent)
+ *           is found too.
  * v1.12.8 — glossary: all-capitals terms (IT, ODF, UML) only match in
  *           capitals, so the word "It" no longer counts as the term "IT".
  * v1.12.7 — the note under the language selector switches to the chosen
@@ -65,7 +70,7 @@
 
   if (window.__riseTranslateLoaded) return;
   window.__riseTranslateLoaded = true;
-  window.__riseTranslateVersion = '1.12.8';
+  window.__riseTranslateVersion = '1.12.9';
   var scriptElRef = document.currentScript;
   var GLOSSARY_FETCH_FILES = ['Translation Glossary.csv', 'glossary.csv', 'Translation Glossary.js'];
 
@@ -292,13 +297,25 @@
   ].join('\n');
 
   /* ── INIT ──────────────────────────────────────────────────────── */
+  // The bar is shown straight away; only restoring a saved language waits for
+  // the glossary, so glossary terms are protected from the first pass.
+  var glossaryDone = false;
+  var glossaryWaiters = [];
+  function whenGlossaryDone(fn) {
+    if (glossaryDone) fn(); else glossaryWaiters.push(fn);
+  }
+
   function init() {
     injectStyles();
+    if (!document.getElementById(BAR_ID)) injectBar();
     loadGlossary(function () {
-      if (!document.getElementById(BAR_ID)) injectBar();
-      waitForCourseShell(function () {
-        placeBar();
-        scheduleCoverPlacementRetries();
+      glossaryDone = true;
+      glossaryWaiters.splice(0).forEach(function (fn) { fn(); });
+    });
+    waitForCourseShell(function () {
+      placeBar();
+      scheduleCoverPlacementRetries();
+      whenGlossaryDone(function () {
         var saved = getSavedLang();
         if (saved) {
           activeTranslation = saved;
@@ -306,17 +323,17 @@
           translatePage(saved);
           broadcastLangToBlocks(saved);
         }
-        initObserver();
-        // Keep code blocks in sync as Rise mounts them on scroll and on
-        // lesson change. A block ignores a repeat of the language it
-        // already shows (see translate-core.js), so this stays cheap.
-        broadcastLangToBlocks(activeTranslation || getSavedLang() || 'en');
-        setInterval(function () {
-          broadcastLangToBlocks(activeTranslation || getSavedLang() || 'en');
-        }, 1500);
       });
-      initPlacementObserver();
+      initObserver();
+      // Keep code blocks in sync as Rise mounts them on scroll and on
+      // lesson change. A block ignores a repeat of the language it
+      // already shows (see translate-core.js), so this stays cheap.
+      broadcastLangToBlocks(activeTranslation || getSavedLang() || 'en');
+      setInterval(function () {
+        broadcastLangToBlocks(activeTranslation || getSavedLang() || 'en');
+      }, 1500);
     });
+    initPlacementObserver();
   }
 
   function injectStyles() {
@@ -841,6 +858,11 @@
     try { add(new URL(clean, base).href); } catch (e) { add(clean); }
     try { add(new URL(clean, window.location.href).href); } catch (e) {}
     try { add(new URL('./' + clean, base).href); } catch (e) {}
+    // Course zips sometimes keep the glossary next to scormcontent/ instead
+    // of inside it.
+    if (/\/scormcontent\/$/i.test(base)) {
+      try { add(new URL('../' + clean, base).href); } catch (e) {}
+    }
     if (script && script.src) {
       try { add(new URL(clean, script.src).href); } catch (e) {}
     }
@@ -924,10 +946,17 @@
     }
   }
 
+  // Gives up after 5 seconds so one slow request can't stall the glossary.
   function fetchUrlText(url) {
-    return fetch(url.replace(/#/g, '%23'), { credentials: 'same-origin' }).then(function (r) {
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 5000) : null;
+    return fetch(url.replace(/#/g, '%23'), { credentials: 'same-origin', signal: ctrl ? ctrl.signal : undefined }).then(function (r) {
+      clearTimeout(timer);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
+    }, function (e) {
+      clearTimeout(timer);
+      throw new Error(e && e.name === 'AbortError' ? 'timed out' : (e && e.message) || 'network error');
     });
   }
 

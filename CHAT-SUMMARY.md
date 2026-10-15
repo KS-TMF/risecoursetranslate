@@ -45,12 +45,13 @@ Paste in **`scormcontent/index.html`**.
 | 15 | Test course showed old features even after clearing the cache | jsDelivr's `@test` alias lagged hours behind GitHub (served 1.12.3 while test was 1.12.7), and purges got throttled | `test-loader.js` — test courses load it from a fixed commit; it asks GitHub for the newest `test` commit and loads that exact version |
 | 16 | Glossary didn't work in the test course | `Translation Glossary.csv` was at the top of the zip, not inside `scormcontent/` | Put the CSV inside `scormcontent/` next to `index.html` (92 terms loaded once moved) |
 | 17 | The word "It" stayed in English | Glossary term "IT" matched case-insensitively | v1.12.8 — all-capitals terms (IT, ODF, UML) only match in capitals |
+| 18 | Language selector missing on first visit until a refresh | The bar was only drawn after the glossary finished loading; with the CSV outside `scormcontent/`, the script fell back to a first-time jsDelivr request for the new commit, which could take 20s+ | v1.12.9 — bar shows immediately; glossary requests time out after 5s; a glossary next to `scormcontent/` (top of the zip) is found too |
 
 ---
 
 ## Test branch status (2026-10-14)
 
-All work is on the `test` branch (currently **v1.12.8**). Test courses use the loader line, which always runs the newest `test` commit:
+All work is on the `test` branch (currently **v1.12.9**). Test courses use the loader line, which always runs the newest `test` commit:
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/KS-TMF/risecoursetranslate@d191a1f88aa8d62a8b0de5219c6e72d7dd3007e9/test-loader.js" data-glossary="Translation Glossary.csv" defer></script>
@@ -58,7 +59,7 @@ All work is on the `test` branch (currently **v1.12.8**). Test courses use the l
 
 Confirmed working in LearnUpon with the loader line: captions translate and switch instantly, CC menu shows the chosen language, English (default) + translated cover note. Glossary works once the CSV is inside `scormcontent/`.
 
-Release prep (2026-10-14): branch `release-1.12.8` = current `main` + this tested `risecoursetranslate.js` (byte-identical to `test`; test-only files left out). Tags: `v1.12.8` (release) and `v1.10.13` (rollback point). Old-vs-new regression check passed (mock course, code blocks, real LearnUpon course, phone size). Not live yet — waiting for a go-live time; then push `release-1.12.8` to `main`, purge jsDelivr `@main`, verify repeatedly, check a live course; rollback = restore `v1.10.13`.
+Release prep (2026-10-14; test has since moved to v1.12.9, so the release branch needs refreshing before go-live): branch `release-1.12.8` = current `main` + this tested `risecoursetranslate.js` (byte-identical to `test`; test-only files left out). Tags: `v1.12.8` (release) and `v1.10.13` (rollback point). Old-vs-new regression check passed (mock course, code blocks, real LearnUpon course, phone size). Not live yet — waiting for a go-live time; then push `release-1.12.8` to `main`, purge jsDelivr `@main`, verify repeatedly, check a live course; rollback = restore `v1.10.13`.
 
 Still open:
 - A glossary term split across two caption lines ("…the Information" / "Framework is…") isn't recognised.
