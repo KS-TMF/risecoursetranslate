@@ -5,7 +5,7 @@
 Add translation to Articulate Rise **xAPI** courses via one CDN script line, while keeping a private glossary of terms (ODF, TM Forum, Digital Twin, etc.) **untranslated** in every language, and — as of v1.10.0 — also translating custom HTML/JavaScript **code blocks**, not just Rise's own text and captions.
 
 **Repo:** https://github.com/KS-TMF/risecoursetranslate  
-**Current versions:** live courses v1.10.13 (`@main`), test courses v1.12.9 (`test` branch, via the loader line)
+**Current versions:** live courses v1.12.9 (`@main`, released 2026-10-15; rollback tag v1.10.13), test courses v1.12.9 (`test` branch, via the loader line)
 
 **Start here if you're new to this project:** read this file top to bottom
 for the history, then `SETUP-GUIDE.md` for how to actually use it (it also
@@ -62,16 +62,15 @@ Confirmed working in LearnUpon with the loader line: captions translate and swit
 
 CDN facts (checked 2026-10-15): jsDelivr sends `s-maxage=43200` (CDN keeps branch links up to 12h) and `max-age=604800` (browsers up to 7 days). Purging `@test` worked (served 1.12.8 instead of 1.12.3 within seconds). jsDelivr also had a brief `503 No healthy backends` outage for not-yet-cached files; cached files kept working.
 
-Release (prepared 2026-10-15, **on hold — main not changed**): branch `release-1.12.9` (commit 106cbb9) = `main` + the tested v1.12.9 `risecoursetranslate.js` (byte-identical to `test`) + all docs, worded for the state after go-live. Test-only files (`test-loader.js`, caption test pages, caption diagnostic) stay on `test`. Supersedes `release-1.12.8` (v1.12.8 regression check passed: mock course, code blocks, real LearnUpon course, phone size). Rollback point: tag `v1.10.13`. Go-live, when the user says: push `release-1.12.9` to `main`, tag `v1.12.9`, purge jsDelivr `@main`, verify the CDN serves 1.12.9, check a live course shows "English (default)" + the note; rollback = restore `v1.10.13` and purge. If `test` changes again first, rebuild the release branch from it.
+**Released to `main` 2026-10-15** (main = ca7a5d0, tag `v1.12.9`): branch `release-1.12.9` = `main` + the tested v1.12.9 `risecoursetranslate.js` (byte-identical to `test`) + all docs, worded for the state after go-live. Test-only files (`test-loader.js`, caption test pages, caption diagnostic) stay on `test`. Supersedes `release-1.12.8` (v1.12.8 regression check passed: mock course, code blocks, real LearnUpon course, phone size). Rollback point: tag `v1.10.13`. Go-live steps done: push `release-1.12.9` to `main`, tag `v1.12.9`, purge jsDelivr `@main`, verify the CDN serves 1.12.9, check a live course shows "English (default)" + the note; rollback = restore `v1.10.13` and purge. Verified after release: the CDN served 1.12.9 on `@main` three checks in a row right after the purge; a fresh browser loading `@main` showed "English (default)" + the note within 0.2s, French translated, glossary term kept. Real LearnUpon upload links had expired (403), so that check used the repo's mock course with the exact `@main` line. Learners' browsers may keep the old v1.10.13 copy for up to 7 days (hard refresh fixes it).
 
-How to tell versions apart without the console: "English (default)" + a note under the selector = v1.12.4+; "Select language" with no note = v1.10.13 (the current live version). 2026-10-15: the user saw "Select language" and no note in a course — the course actually had the plain `@test` line, and the browser was still using the old copy it saved earlier (v1.12.3 or older; "Select language" was the label up to v1.12.3), even though the CDN was serving v1.12.9 by then. Fix: use the loader line in test courses. Same day, jsDelivr returned `503 No healthy backends` for several minutes on `@test` and on the newest commit (twice, ~11:30 and ~11:44); `@main` and already-cached files kept working.
+How to tell versions apart without the console: "English (default)" + a note under the selector = v1.12.4+; "Select language" with no note = v1.12.3 or older (e.g. a browser still holding the pre-release v1.10.13 copy). 2026-10-15: the user saw "Select language" and no note in a course — the course actually had the plain `@test` line, and the browser was still using the old copy it saved earlier (v1.12.3 or older; "Select language" was the label up to v1.12.3), even though the CDN was serving v1.12.9 by then. Fix: use the loader line in test courses. Same day, jsDelivr returned `503 No healthy backends` for several minutes on `@test` and on the newest commit (twice, ~11:30 and ~11:44); `@main` and already-cached files kept working.
 
 Still open:
 - A glossary term split across two caption lines ("…the Information" / "Framework is…") isn't recognised.
 - Plurals aren't covered by singular glossary terms ("frameworks" vs "Framework") — add plural rows.
 - Generic glossary rows (e.g. "Model") stop those words translating everywhere — review the CSV.
 - Edit `index.html` in a plain-text editor: TextEdit's curly quotes or a pasted `%22` break the script line.
-- Before go-live, rebuild the release branch from the current `test` script (v1.12.9).
 
 ## Core problem (still relevant)
 
@@ -175,7 +174,7 @@ Open course → **F12** → **Console**:
 
 | Check | Expected |
 |-------|----------|
-| `window.__riseTranslateVersion` | `"1.10.13"` live, `"1.12.9"` test |
+| `window.__riseTranslateVersion` | `"1.12.9"` (test may be newer) |
 | `window.__riseGlossaryCount` | Your term count (92 in the ODF course) |
 | Console message | `Glossary loaded: X protected term(s) from …` |
 
@@ -212,7 +211,7 @@ Digital Twin,Digital Twin,
 | v1.8.9 | **CSV only** — embed via Update Glossary, no `.js` |
 | v1.9.1 | Fix language search when the dropdown panel is portaled to `<body>` |
 | v1.10.0 | **Code blocks now translate.** Adds `translate-core.js` (loaded per code block) and the broadcast/skip logic in `risecoursetranslate.js` that lets the two talk over `postMessage`. Merged in from the `Rise_Translate_Test_v1.0` prototype repo. Full mechanism in `SETUP-GUIDE.md`. |
-| v1.10.1–v1.10.13 | Glossary and code-block fixes; skip video-player UI; Rise transcripts and tooltips translate — **current live version (v1.10.13)** |
+| v1.10.1–v1.10.13 | Glossary and code-block fixes; skip video-player UI; Rise transcripts and tooltips translate — live until 2026-10-15; v1.10.13 is the rollback tag |
 | v1.11.x | First caption attempt — reverted |
 | v1.12.0–v1.12.8 | *(test)* Live video captions, CC menu renamed, English (default) + cover note, caption size back to default, all-capitals glossary terms |
 | v1.12.9 | *(test)* Selector shows immediately on first visit; glossary fetch timeout; glossary at the top of the zip found |

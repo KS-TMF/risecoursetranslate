@@ -17,11 +17,11 @@ That file is history; this file is current behavior.
 
 | Where | `risecoursetranslate.js` | `translate-core.js` | Who uses it |
 |---|---|---|---|
-| `main` branch (`@main` on the CDN) | **v1.10.13** | 1.2.1 | Live courses |
+| `main` branch (`@main` on the CDN) | **v1.12.9** (live since 15 Oct 2026; rollback tag `v1.10.13`) | 1.2.1 | Live courses |
 | `test` branch | **v1.12.9** | 1.2.1 | Test courses, via the loader line (see "Test branch") |
 
-The video-caption work (v1.12.x) is on `test` only. It reaches live courses
-when the release is pushed to `main` (see "Going live"). If you push a new
+The video-caption work (v1.12.x) went live with v1.12.9. New work lands on
+`test` first and reaches live courses when pushed to `main` (see "Going live"). If you push a new
 version, update this table and "How to verify it works" at the same time —
 these numbers have drifted before.
 
@@ -29,9 +29,8 @@ these numbers have drifted before.
 selector says **"English (default)"** on v1.12.4 and later, and **"Select
 language"** on v1.10.13 and earlier (which also has no note under it).
 
-**Release status:** branch `release-1.12.9` holds the v1.12.9 release for
-`main`, with these docs updated for go-live. **On hold** — `main` is
-unchanged until the go-live decision.
+**Release status:** v1.12.9 **released to `main` on 15 Oct 2026** (commit
+ca7a5d0, tag `v1.12.9`), CDN purged and verified serving 1.12.9.
 
 ---
 
@@ -73,7 +72,7 @@ Paste once in **`scormcontent/index.html`**. **Your team does not update this.**
 
 ## Current version
 
-- **Live (`main`):** v1.10.13
+- **Live (`main`):** v1.12.9
 - **Test (`test`):** v1.12.9
 
 See "Versions at a glance" above.
@@ -230,7 +229,7 @@ Glossary loaded: 49 protected term(s) from embedded-csv
 
 | Check | Expected |
 |-------|----------|
-| `window.__riseTranslateVersion` | `"1.10.13"` on live courses, `"1.12.9"` on test courses |
+| `window.__riseTranslateVersion` | `"1.12.9"` (test courses may be newer) |
 | `window.__riseGlossaryCount` | Your term count (e.g. `92` in the ODF course) |
 | Console | `Glossary loaded: X protected term(s) from …` (embedded-csv or the CSV's address) |
 | First visit | The language selector appears within about a second, with no refresh needed (v1.12.9+) |
@@ -263,7 +262,7 @@ Open the course, open a lesson with a translated code block, then **F12 → Cons
 | Code block translated twice / garbled | Only load `translate-core.js` once per block; don't also let the course bar try to walk unmanaged content inside it |
 | jsDelivr serving old code after a push | The CDN keeps `@main` / `@test` for up to 12 hours and browsers for up to 7 days. Purge the CDN copy (see "Going live"), then hard-refresh (Cmd+Shift+R). Test courses avoid this with the loader line |
 | Language selector missing on first visit until a refresh | Fixed in v1.12.9 — the selector used to wait for the glossary, and a slow first CDN request could hold it back for 20s+ |
-| No note under the selector / selector says "Select language" | The course is running v1.12.3 or older: either the live version (v1.10.13, `@main` line), or a test course on the plain `@test` line whose browser kept an old copy (browsers keep it up to 7 days). Test courses should use the loader line; the note reaches live courses with the v1.12.9 release |
+| No note under the selector / selector says "Select language" | The course is running v1.12.3 or older: a browser still holding an old copy (browsers keep it up to 7 days) — e.g. the pre-release v1.10.13 on a live course, or an old `@test` copy. Hard-refresh (Cmd+Shift+R). Test courses should use the loader line |
 | Captions stay in English | Captions translate on v1.12.x (`test`) only. Turn captions on with the player's CC button, then pick a language |
 | CDN answers `503 No healthy backends` | A jsDelivr outage for files it hasn't cached yet — usually clears within minutes. Already-cached files keep working |
 | Script line stopped working after editing `index.html` | Edit in a plain-text editor — TextEdit's curly quotes or a pasted `%22` break the line |
@@ -448,7 +447,7 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 
 | File | Purpose | Notes |
 |------|---------|-------|
-| `risecoursetranslate.js` | Main translator (course-level bar) — loaded from CDN via the one script line | `__riseTranslateVersion` = `"1.10.13"` on `main`, `"1.12.9"` on `test` |
+| `risecoursetranslate.js` | Main translator (course-level bar) — loaded from CDN via the one script line | `__riseTranslateVersion` = `"1.12.9"` on `main` and `test` |
 | `test-loader.js` | Test courses only — loads the newest `test` commit (see "Test branch") | Loaded from a fixed commit, so its own address never changes |
 | `translate-core.js` | Translator for individual code blocks — loaded from CDN, one line per block | `TRANSLATE_CORE_VERSION = "1.2.1"`; has its own hardcoded `KEEP` list and `ENGINE` switch |
 | `code-block.html` | Worked example of a code block wired up with `translate-core.js` | Demo content only — diagram, reveal-scenario, form input, `data-notranslate` sample |
@@ -516,7 +515,7 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 | v1.9.1 | Fix language search when the dropdown panel is portaled to `<body>` |
 | v1.10.0 | **Code blocks now translate.** Adds `translate-core.js` and the broadcast/skip logic described above |
 | v1.10.1–v1.10.6 | Code-block sync fallback; glossary fixes (word boundaries, filenames with spaces); each text translated on its own |
-| v1.10.10–v1.10.13 | Skip video-player UI; keep Rise sidebar modules intact; Rise audio transcripts and hover tooltips translate — **current live version** |
+| v1.10.10–v1.10.13 | Skip video-player UI; keep Rise sidebar modules intact; Rise audio transcripts and hover tooltips translate — live until 15 Oct 2026; rollback tag `v1.10.13` |
 | v1.12.0–v1.12.1 | *(test)* Video captions translate live; on-screen caption redraws at once on switch |
 | v1.12.2–v1.12.5 | *(test)* Caption size tried at 70%, then back to browser default (`data-caption-size` opt-in) |
 | v1.12.3–v1.12.7 | *(test)* "English (default)" at the top of the list; translated note under the selector on the cover |
@@ -539,4 +538,4 @@ and broadcast calls on language select/reset/init. `translate-core.js` and
 
 ---
 
-*Last updated: 15 October 2026 — versions (live v1.10.13, test v1.12.9), test branch + loader, going-live steps, video captions, v1.12.9 first-visit selector fix, CDN caching facts, and the full file list. See `CHAT-SUMMARY.md` for full project history.*
+*Last updated: 15 October 2026 — v1.12.9 released to live; versions (live v1.12.9, rollback v1.10.13), test branch + loader, going-live steps, video captions, v1.12.9 first-visit selector fix, CDN caching facts, and the full file list. See `CHAT-SUMMARY.md` for full project history.*
