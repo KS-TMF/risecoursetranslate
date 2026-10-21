@@ -11,6 +11,16 @@ That file is history; this file is current behavior.
 
 **GitHub repo:** https://github.com/KS-TMF/risecoursetranslate
 
+> **⏸ PAUSED on main since 2026-10-21.** `risecoursetranslate.js` on main is a
+> stub that shows nothing and sends nothing to Google, so live courses look as
+> if the line were not there. It answers code blocks with "English" so they
+> hide their own selector. `translate-core.js` is unchanged (test courses'
+> code blocks load it from @main). The **test branch is still active**.
+> Learners whose browser cached the old script may still see the selector for
+> up to 7 days. **To turn it back on:**
+> `git checkout v1.12.9 -- risecoursetranslate.js`, commit, push to main, then
+> purge `https://purge.jsdelivr.net/gh/KS-TMF/risecoursetranslate@main/risecoursetranslate.js`.
+
 ---
 
 ## Versions at a glance (checked against the code)
