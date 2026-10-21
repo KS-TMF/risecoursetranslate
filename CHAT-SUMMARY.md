@@ -45,6 +45,7 @@ Paste in **`scormcontent/index.html`**. Test courses use the loader line instead
 | 16 | Glossary didn't work in the test course | `Translation Glossary.csv` was at the top of the zip, not inside `scormcontent/` | Put the CSV inside `scormcontent/` next to `index.html` (92 terms loaded once moved). From v1.12.9 the top of the zip is checked too |
 | 17 | The word "It" stayed in English | Glossary term "IT" matched case-insensitively | v1.12.8 — all-capitals terms (IT, ODF, UML) only match in capitals |
 | 18 | Language selector missing on first visit until a refresh | The bar was only drawn after the glossary finished loading; with the CSV outside `scormcontent/`, the script fell back to a first-time jsDelivr request for the new commit, which could take 20s+ | v1.12.9 — bar shows immediately; glossary requests time out after 5s; a glossary next to `scormcontent/` (top of the zip) is found too |
+| 19 | Translation needed switching off for live learners (test kept running) | — | 21 Oct 2026 — main's `risecoursetranslate.js` replaced with a paused stub (no selector, no Google, code blocks told "English"); CDN purged and verified; test untouched. Restore from tag `v1.12.9` |
 
 ---
 
