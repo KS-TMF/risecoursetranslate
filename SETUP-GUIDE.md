@@ -11,6 +11,15 @@ That file is history; this file is current behavior.
 
 **GitHub repo:** https://github.com/KS-TMF/risecoursetranslate
 
+> **⏸ TEST PAUSED TOO since 2026-10-26.** `risecoursetranslate.js` on `test` is
+> the same paused stub, so courses on the test-loader line show nothing either.
+> To turn test back on: `git checkout v1.12.9 -- risecoursetranslate.js` on the
+> test branch, commit, push to test, purge
+> `https://purge.jsdelivr.net/gh/KS-TMF/risecoursetranslate@test/risecoursetranslate.js`.
+> The code was also copied (2026-10-26) to the private org repo
+> **tmforum/training-translations**; a private repo can't be served by jsDelivr,
+> so courses still load from this public repo until hosting is agreed.
+>
 > **⏸ PAUSED on main since 2026-10-21.** `risecoursetranslate.js` on main is a
 > stub that shows nothing and sends nothing to Google, so live courses look as
 > if the line were not there. It answers code blocks with "English" so they
@@ -28,7 +37,7 @@ That file is history; this file is current behavior.
 | Where | `risecoursetranslate.js` | `translate-core.js` | Who uses it |
 |---|---|---|---|
 | `main` branch (`@main` on the CDN) | **PAUSED** since 21 Oct 2026 (stub: no selector, no Google; restore = tag `v1.12.9`) | 1.2.1 | Live courses |
-| `test` branch | **v1.12.9** | 1.2.1 | Test courses, via the loader line (see "Test branch") |
+| `test` branch | **PAUSED** since 26 Oct 2026 (stub; restore = tag `v1.12.9`) | 1.2.1 | Test courses, via the loader line (see "Test branch") |
 
 The video-caption work (v1.12.x) went live with v1.12.9. New work lands on
 `test` first and reaches live courses when pushed to `main` (see "Going live"). If you push a new
